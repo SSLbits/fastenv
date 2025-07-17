@@ -203,41 +203,69 @@ try {
     Write-Info "You may need to manually set the font in Windows Terminal settings"
 }
 
-# Configure VS Code
+# Configure VS Code - Enhanced version
 Write-Info "Configuring VS Code..."
 try {
-    $vsCodeSettingsPath = "$env:APPDATA\Code\User\settings.json"
+    # Check for VS Code installation
+    $vsCodePaths = @(
+        "$env:APPDATA\Code\User\settings.json",           # VS Code
+        "$env:APPDATA\Code - Insiders\User\settings.json" # VS Code Insiders
+    )
 
-    if (Test-Path $vsCodeSettingsPath) {
-        # Read current settings
-        $vsCodeSettings = Get-Content $vsCodeSettingsPath -Raw | ConvertFrom-Json
+    $vsCodeFound = $false
 
-        # Set terminal font
-        $vsCodeSettings."terminal.integrated.fontFamily" = "MesloLGM Nerd Font Mono"
-        $vsCodeSettings."terminal.integrated.fontSize" = 12
-
-        # Save settings
-        $vsCodeSettings | ConvertTo-Json -Depth 10 | Set-Content $vsCodeSettingsPath -Encoding UTF8
-        Write-Success "VS Code configured successfully"
-    } else {
-        # Create new settings file
-        $newSettings = @{
-            "terminal.integrated.fontFamily" = "MesloLGM Nerd Font Mono"
-            "terminal.integrated.fontSize" = 12
-        }
-
-        # Ensure directory exists
+    foreach ($vsCodeSettingsPath in $vsCodePaths) {
         $vsCodeDir = Split-Path $vsCodeSettingsPath -Parent
-        if (-not (Test-Path $vsCodeDir)) {
-            New-Item -ItemType Directory -Path $vsCodeDir -Force | Out-Null
-        }
 
-        $newSettings | ConvertTo-Json -Depth 10 | Set-Content $vsCodeSettingsPath -Encoding UTF8
-        Write-Success "VS Code settings created and configured"
+        # Check if VS Code directory exists (indicates VS Code is installed)
+        if (Test-Path $vsCodeDir -PathType Container) {
+            $vsCodeFound = $true
+            Write-Info "Found VS Code at: $vsCodeDir"
+
+            # Initialize settings object
+            $vsCodeSettings = @{}
+
+            # Read existing settings if file exists
+            if (Test-Path $vsCodeSettingsPath) {
+                try {
+                    $existingContent = Get-Content $vsCodeSettingsPath -Raw
+                    if ($existingContent.Trim()) {
+                        $vsCodeSettings = $existingContent | ConvertFrom-Json -AsHashtable
+                    }
+                } catch {
+                    Write-Warning "Could not parse existing VS Code settings, creating new ones"
+                    $vsCodeSettings = @{}
+                }
+            }
+
+            # Set terminal font settings
+            $vsCodeSettings["terminal.integrated.fontFamily"] = "MesloLGM Nerd Font Mono"
+            $vsCodeSettings["terminal.integrated.fontSize"] = 12
+
+            # Convert back to JSON and save
+            $jsonContent = $vsCodeSettings | ConvertTo-Json -Depth 10
+            $jsonContent | Set-Content $vsCodeSettingsPath -Encoding UTF8
+
+            Write-Success "VS Code configured successfully: $(Split-Path $vsCodeSettingsPath -Leaf)"
+        }
     }
+
+    if (-not $vsCodeFound) {
+        Write-Warning "VS Code not found or not installed"
+        Write-Info "If you have VS Code installed, you can manually set the font:"
+        Write-Info "  1. Open VS Code"
+        Write-Info "  2. Press Ctrl+, to open settings"
+        Write-Info "  3. Search for 'terminal.integrated.fontFamily'"
+        Write-Info "  4. Set to: MesloLGM Nerd Font Mono"
+    }
+
 } catch {
     Write-Warning "Failed to configure VS Code: $($_.Exception.Message)"
-    Write-Info "You may need to manually set the font in VS Code settings"
+    Write-Info "Manual configuration steps:"
+    Write-Info "  1. Open VS Code"
+    Write-Info "  2. Press Ctrl+, to open settings"
+    Write-Info "  3. Search for 'terminal.integrated.fontFamily'"
+    Write-Info "  4. Set to: MesloLGM Nerd Font Mono"
 }
 
 # Configure PowerShell profile
