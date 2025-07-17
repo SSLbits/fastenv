@@ -1,9 +1,10 @@
 # setup-powershell-environment.ps1
 # PowerShell Environment Setup Script
-# Sets up Oh My Posh, fzf, and ps-fzf for PowerShell 7 with auto-update enabled
+# Sets up Oh My Posh, fzf, ps-fzf, and MesloLGM Nerd Font with auto-update enabled
 
 param(
     [string]$Theme = "jandedobbeleer",
+    [string]$Font = "MesloLGM",
     [switch]$Force
 )
 
@@ -30,7 +31,6 @@ function Install-Winget {
     if (-not (Test-Command "winget")) {
         Write-Host "📦 Installing winget..." -ForegroundColor Yellow
         try {
-            # Download and install App Installer from Microsoft Store
             $progressPreference = 'silentlyContinue'
             Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile "$env:TEMP\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
             Add-AppxPackage "$env:TEMP\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
@@ -60,7 +60,6 @@ function Install-OhMyPosh {
             winget install JanDeDobbeleer.OhMyPosh -s winget --accept-source-agreements --accept-package-agreements
         }
         else {
-            # Fallback to manual installation
             Set-ExecutionPolicy Bypass -Scope Process -Force
             Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://ohmyposh.dev/install.ps1'))
         }
@@ -82,12 +81,139 @@ function Install-OhMyPosh {
     }
 }
 
+# Install Nerd Font
+function Install-NerdFont {
+    Write-Host "🔤 Installing $Font Nerd Font..." -ForegroundColor Yellow
+
+    try {
+        # Try using Oh My Posh's font installer first
+        if (Test-Command "oh-my-posh") {
+            oh-my-posh font install $Font
+            Write-Host "✅ $Font Nerd Font installed successfully" -ForegroundColor Green
+            return $true
+        }
+
+        # Fallback to winget if available
+        if (Test-Command "winget") {
+            $fontName = "$Font NF"
+            winget install "$fontName" --accept-source-agreements --accept-package-agreements
+            Write-Host "✅ $Font Nerd Font installed via winget" -ForegroundColor Green
+            return $true
+        }
+
+        # Manual installation as last resort
+        Write-Host "Installing $Font Nerd Font manually..." -ForegroundColor Yellow
+        $fontUrl = "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/MesloLGM.zip"
+        $fontPath = "$env:TEMP\MesloLGM.zip"
+        $extractPath = "$env:TEMP\MesloLGM"
+
+        Invoke-WebRequest -Uri $fontUrl -OutFile $fontPath
+        Expand-Archive -Path $fontPath -DestinationPath $extractPath -Force
+
+        # Install fonts
+        $shell = New-Object -ComObject Shell.Application
+        $fonts = $shell.Namespace(0x14)
+
+        Get-ChildItem -Path $extractPath -Filter "*.ttf" | ForEach-Object {
+            $fonts.CopyHere($_.FullName, 0x10)
+        }
+
+        # Clean up
+        Remove-Item $fontPath, $extractPath -Recurse -Force
+
+        Write-Host "✅ $Font Nerd Font installed manually" -ForegroundColor Green
+        return $true
+    }
+    catch {
+        Write-Error "Failed to install $Font Nerd Font: $_"
+        return $false
+    }
+}
+
+# Configure Windows Terminal
+function Configure-WindowsTerminal {
+    Write-Host "🖥️ Configuring Windows Terminal..." -ForegroundColor Yellow
+
+    try {
+        $wtSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+
+        if (Test-Path $wtSettingsPath) {
+            $wtSettings = Get-Content $wtSettingsPath -Raw | ConvertFrom-Json
+
+            # Find PowerShell profile and set font
+            $pwshProfile = $wtSettings.profiles.list | Where-Object { $_.name -eq "PowerShell" -or $_.commandline -like "*pwsh*" }
+            if ($pwshProfile) {
+                if (-not $pwshProfile.font) {
+                    $pwshProfile | Add-Member -MemberType NoteProperty -Name "font" -Value @{}
+                }
+                $pwshProfile.font.face = "$Font Nerd Font"
+                $pwshProfile.font.size = 12
+
+                # Backup and save
+                $backupPath = "$wtSettingsPath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+                Copy-Item $wtSettingsPath $backupPath
+
+                $wtSettings | ConvertTo-Json -Depth 10 | Set-Content $wtSettingsPath -Encoding UTF8
+                Write-Host "✅ Windows Terminal configured with $Font Nerd Font" -ForegroundColor Green
+                Write-Host "Backup saved to: $backupPath" -ForegroundColor Yellow
+            }
+        }
+        else {
+            Write-Host "Windows Terminal settings not found - may need to launch Windows Terminal first" -ForegroundColor Yellow
+        }
+
+        return $true
+    }
+    catch {
+        Write-Error "Failed to configure Windows Terminal: $_"
+        return $false
+    }
+}
+
+# Configure VS Code
+function Configure-VSCode {
+    Write-Host "📝 Configuring VS Code..." -ForegroundColor Yellow
+
+    try {
+        $vscodeSettingsPath = "$env:APPDATA\Code\User\settings.json"
+
+        if (Test-Path $vscodeSettingsPath) {
+            $vscodeSettings = Get-Content $vscodeSettingsPath -Raw | ConvertFrom-Json
+        }
+        else {
+            # Create settings file if it doesn't exist
+            $vscodeSettings = @{}
+            $vscodeDir = Split-Path $vscodeSettingsPath -Parent
+            if (-not (Test-Path $vscodeDir)) {
+                New-Item -ItemType Directory -Path $vscodeDir -Force
+            }
+        }
+
+        # Set terminal font
+        $vscodeSettings."terminal.integrated.fontFamily" = "$Font Nerd Font"
+        $vscodeSettings."terminal.integrated.fontSize" = 12
+
+        # Optional: Set editor font as well
+        $vscodeSettings."editor.fontFamily" = "$Font Nerd Font, Consolas, 'Courier New', monospace"
+        $vscodeSettings."editor.fontSize" = 14
+
+        # Save settings
+        $vscodeSettings | ConvertTo-Json -Depth 10 | Set-Content $vscodeSettingsPath -Encoding UTF8
+        Write-Host "✅ VS Code configured with $Font Nerd Font" -ForegroundColor Green
+
+        return $true
+    }
+    catch {
+        Write-Error "Failed to configure VS Code: $_"
+        return $false
+    }
+}
+
 # Enable Oh My Posh Auto-Upgrade
 function Enable-OhMyPoshAutoUpgrade {
     Write-Host "🔄 Enabling Oh My Posh auto-upgrade..." -ForegroundColor Yellow
 
     try {
-        # Use the built-in command to enable auto-upgrade
         oh-my-posh enable upgrade
         Write-Host "✅ Oh My Posh auto-upgrade enabled successfully" -ForegroundColor Green
         return $true
@@ -171,23 +297,12 @@ function Install-PsFzf {
     }
 }
 
-# Configure PowerShell Profile (No welcome message)
+# Configure PowerShell Profile
 function Configure-Profile {
     Write-Host "⚙️ Configuring PowerShell profile..." -ForegroundColor Yellow
 
     $profilePath = $PROFILE.CurrentUserCurrentHost
 
-    # Check if profile was already configured by this script
-    if (Test-Path $profilePath) {
-        $profileContent = Get-Content $profilePath -Raw
-        if ($profileContent -match "# PowerShell Profile - Auto-generated by setup script") {
-            if (-not $Force) {
-                Write-Host "PowerShell profile already configured. Use -Force to reconfigure." -ForegroundColor Yellow
-                return $true
-            }
-        }
-    }
-    
     # Create profile directory if it doesn't exist
     $profileDir = Split-Path $profilePath -Parent
     if (-not (Test-Path $profileDir)) {
@@ -201,7 +316,7 @@ function Configure-Profile {
         Write-Host "Backed up existing profile to: $backupPath" -ForegroundColor Yellow
     }
 
-    # Create new profile content (without welcome message)
+    # Create new profile content
     $profileContent = @"
 # PowerShell Profile - Auto-generated by setup script
 # Generated on: $(Get-Date)
@@ -247,22 +362,30 @@ try {
     # Install components
     if (-not (Install-Winget)) { exit 1 }
     if (-not (Install-OhMyPosh)) { exit 1 }
+    if (-not (Install-NerdFont)) { exit 1 }
     if (-not (Enable-OhMyPoshAutoUpgrade)) { exit 1 }
     if (-not (Install-Fzf)) { exit 1 }
     if (-not (Install-PsFzf)) { exit 1 }
 
-    # Configure profile
+    # Configure applications
+    Configure-WindowsTerminal
+    Configure-VSCode
     Configure-Profile
 
     Write-Host ""
     Write-Host "🎉 Setup completed successfully!" -ForegroundColor Green
     Write-Host "📝 Next steps:" -ForegroundColor Yellow
     Write-Host "   1. Close and reopen your PowerShell terminal" -ForegroundColor White
-    Write-Host "   2. Enjoy your new Oh My Posh prompt with auto-update and fzf functionality!" -ForegroundColor White
+    Write-Host "   2. Restart Windows Terminal and VS Code to apply font changes" -ForegroundColor White
+    Write-Host "   3. Enjoy your new Oh My Posh prompt with proper font rendering!" -ForegroundColor White
+    Write-Host ""
+    Write-Host "🔤 Font configuration:" -ForegroundColor Yellow
+    Write-Host "   - $Font Nerd Font installed and configured" -ForegroundColor White
+    Write-Host "   - Windows Terminal font set to $Font Nerd Font" -ForegroundColor White
+    Write-Host "   - VS Code terminal font set to $Font Nerd Font" -ForegroundColor White
     Write-Host ""
     Write-Host "🔄 Auto-update features:" -ForegroundColor Yellow
     Write-Host "   - Oh My Posh will automatically check for and install updates" -ForegroundColor White
-    Write-Host "   - Enabled via 'oh-my-posh enable upgrade' command" -ForegroundColor White
     Write-Host "   - Use 'Update-OhMyPosh' for manual update checks" -ForegroundColor White
     Write-Host ""
     Write-Host "🔧 Available fzf commands:" -ForegroundColor Yellow
@@ -271,9 +394,6 @@ try {
     Write-Host "   - Tab: Enhanced tab completion" -ForegroundColor White
     Write-Host "   - ff: Fuzzy find and navigate to directory" -ForegroundColor White
     Write-Host "   - fh: Fuzzy search command history" -ForegroundColor White
-    Write-Host ""
-    Write-Host "🎨 To change Oh My Posh theme later:" -ForegroundColor Yellow
-    Write-Host "   oh-my-posh init pwsh --config `$env:POSH_THEMES_PATH\[theme-name].omp.json | Invoke-Expression" -ForegroundColor White
 }
 catch {
     Write-Error "Setup failed: $_"
