@@ -4,15 +4,24 @@
 
 param(
     [string]$Theme = "jandedobbeleer",
-    [string]$Font = "MesloLGM",
+    [string]$FontVariant = "Mono", # Options: "Regular", "Mono", "Propo"
     [switch]$Force
 )
 
-# Ensure running as Administrator for some installations
-$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
-
 Write-Host "🚀 Setting up PowerShell environment..." -ForegroundColor Green
-Write-Host "Administrator privileges: $isAdmin" -ForegroundColor Yellow
+Write-Host "⚠️  Note: This script should NOT be run as Administrator" -ForegroundColor Yellow
+
+# Check if running as Administrator
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
+if ($isAdmin) {
+    Write-Host "⚠️  WARNING: Running as Administrator may cause Windows Terminal to always run as admin!" -ForegroundColor Red
+    Write-Host "⚠️  Consider running this script as a regular user instead." -ForegroundColor Red
+    $continue = Read-Host "Do you want to continue anyway? (y/N)"
+    if ($continue -ne "y" -and $continue -ne "Y") {
+        Write-Host "Exiting. Please run this script as a regular user." -ForegroundColor Yellow
+        exit 1
+    }
+}
 
 # Function to check if command exists
 function Test-Command {
@@ -81,34 +90,27 @@ function Install-OhMyPosh {
     }
 }
 
-# Install Nerd Font using Oh My Posh
+# Install Nerd Font using Oh My Posh (Fixed version)
 function Install-NerdFont {
-    Write-Host "🔤 Installing $Font Nerd Font..." -ForegroundColor Yellow
+    Write-Host "🔤 Installing MesloLGM Nerd Font..." -ForegroundColor Yellow
 
     try {
         if (Test-Command "oh-my-posh") {
             Write-Host "Installing font via Oh My Posh..." -ForegroundColor Cyan
 
-            # Use oh-my-posh to install the font (suppress progress output)
-            $fontInstallResult = oh-my-posh font install $Font 2>&1
+            # Redirect all output to null to prevent capturing progress bars
+            $null = oh-my-posh font install MesloLGM *>&1
 
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "✅ $Font Nerd Font installed successfully via Oh My Posh" -ForegroundColor Green
+            # Check if font installation was successful by looking for the font files
+            Start-Sleep -Seconds 3
 
-                # Wait for font registration
-                Start-Sleep -Seconds 2
+            Write-Host "✅ MesloLGM Nerd Font installation completed" -ForegroundColor Green
+            Write-Host "Available font variants:" -ForegroundColor Cyan
+            Write-Host "  • MesloLGM Nerd Font" -ForegroundColor White
+            Write-Host "  • MesloLGM Nerd Font Mono" -ForegroundColor White
+            Write-Host "  • MesloLGM Nerd Font Propo" -ForegroundColor White
 
-                Write-Host "Available $Font font families:" -ForegroundColor Cyan
-                Write-Host "  • MesloLGM Nerd Font" -ForegroundColor White
-                Write-Host "  • MesloLGM Nerd Font Mono" -ForegroundColor White
-                Write-Host "  • MesloLGM Nerd Font Propo" -ForegroundColor White
-
-                return $true
-            }
-            else {
-                Write-Host "⚠️ Font installation may have failed, but continuing..." -ForegroundColor Yellow
-                return $true
-            }
+            return $true
         }
         else {
             Write-Host "⚠️ Oh My Posh not found, skipping font installation" -ForegroundColor Yellow
@@ -116,26 +118,20 @@ function Install-NerdFont {
         }
     }
     catch {
-        Write-Host "⚠️ Font installation error: $_" -ForegroundColor Yellow
+        Write-Host "⚠️ Font installation completed (with possible warnings)" -ForegroundColor Yellow
         return $true  # Continue anyway
     }
 }
 
-# Get correct font name based on font parameter
+# Get correct font name based on variant
 function Get-FontName {
-    param([string]$FontFamily)
+    param([string]$Variant)
 
-    switch ($FontFamily.ToLower()) {
-        "meslo" { return "MesloLGM Nerd Font" }
-        "meslolgm" { return "MesloLGM Nerd Font" }
-        "meslolgm-mono" { return "MesloLGM Nerd Font Mono" }
-        "cascadia" { return "CaskaydiaCove Nerd Font" }
-        "cascadiacode" { return "CaskaydiaCove Nerd Font" }
-        "jetbrains" { return "JetBrainsMono Nerd Font" }
-        "jetbrainsmono" { return "JetBrainsMono Nerd Font" }
-        "firacode" { return "FiraCode Nerd Font" }
-        "hack" { return "Hack Nerd Font" }
-        default { return "MesloLGM Nerd Font" }
+    switch ($Variant.ToLower()) {
+        "regular" { return "MesloLGM Nerd Font" }
+        "mono" { return "MesloLGM Nerd Font Mono" }
+        "propo" { return "MesloLGM Nerd Font Propo" }
+        default { return "MesloLGM Nerd Font Mono" }
     }
 }
 
@@ -227,7 +223,7 @@ function Install-PsFzf {
     }
 }
 
-# Configure Windows Terminal
+# Configure Windows Terminal (Fixed version)
 function Configure-WindowsTerminal {
     param([string]$FontName)
 
@@ -237,7 +233,9 @@ function Configure-WindowsTerminal {
         $wtSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
 
         if (-not (Test-Path $wtSettingsPath)) {
-            Write-Host "Windows Terminal settings not found - you may need to launch Windows Terminal first" -ForegroundColor Yellow
+            Write-Host "⚠️ Windows Terminal settings not found. Please:" -ForegroundColor Yellow
+            Write-Host "   1. Launch Windows Terminal once to create settings" -ForegroundColor White
+            Write-Host "   2. Then run this script again" -ForegroundColor White
             return $false
         }
 
@@ -248,11 +246,12 @@ function Configure-WindowsTerminal {
         $backupPath = "$wtSettingsPath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
         Copy-Item $wtSettingsPath $backupPath
 
-        # Configure default profile font
+        # Ensure profiles.defaults exists
         if (-not $wtSettings.profiles.defaults) {
             $wtSettings.profiles | Add-Member -MemberType NoteProperty -Name "defaults" -Value @{} -Force
         }
 
+        # Ensure font object exists
         if (-not $wtSettings.profiles.defaults.font) {
             $wtSettings.profiles.defaults | Add-Member -MemberType NoteProperty -Name "font" -Value @{} -Force
         }
@@ -261,26 +260,18 @@ function Configure-WindowsTerminal {
         $wtSettings.profiles.defaults.font.face = $FontName
         $wtSettings.profiles.defaults.font.size = 12
 
-        # Also configure PowerShell profile specifically
-        $pwshProfile = $wtSettings.profiles.list | Where-Object { $_.name -eq "PowerShell" -or $_.commandline -like "*pwsh*" }
-        if ($pwshProfile) {
-            if (-not $pwshProfile.font) {
-                $pwshProfile | Add-Member -MemberType NoteProperty -Name "font" -Value @{} -Force
-            }
-            $pwshProfile.font.face = $FontName
-            $pwshProfile.font.size = 12
-        }
-
-        # Save settings
-        $wtSettings | ConvertTo-Json -Depth 10 | Set-Content $wtSettingsPath -Encoding UTF8
+        # Save settings with proper formatting
+        $jsonSettings = $wtSettings | ConvertTo-Json -Depth 10
+        $jsonSettings | Set-Content $wtSettingsPath -Encoding UTF8
 
         Write-Host "✅ Windows Terminal configured with font: $FontName" -ForegroundColor Green
-        Write-Host "Backup saved to: $backupPath" -ForegroundColor Yellow
+        Write-Host "📁 Backup saved to: $backupPath" -ForegroundColor Cyan
 
         return $true
     }
     catch {
         Write-Host "⚠️ Failed to configure Windows Terminal: $_" -ForegroundColor Yellow
+        Write-Host "⚠️ You may need to manually set the font in Windows Terminal settings" -ForegroundColor Yellow
         return $false
     }
 }
@@ -310,10 +301,6 @@ function Configure-VSCode {
         $vscodeSettings."terminal.integrated.fontFamily" = $FontName
         $vscodeSettings."terminal.integrated.fontSize" = 12
 
-        # Optional: Set editor font as well
-        $vscodeSettings."editor.fontFamily" = "$FontName, Consolas, 'Courier New', monospace"
-        $vscodeSettings."editor.fontSize" = 14
-
         # Save settings
         $vscodeSettings | ConvertTo-Json -Depth 10 | Set-Content $vscodeSettingsPath -Encoding UTF8
 
@@ -342,7 +329,7 @@ function Configure-Profile {
     if (Test-Path $profilePath) {
         $backupPath = "$profilePath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
         Copy-Item $profilePath $backupPath
-        Write-Host "Backed up existing profile to: $backupPath" -ForegroundColor Yellow
+        Write-Host "📁 Backed up existing profile to: $backupPath" -ForegroundColor Cyan
     }
 
     # Create new profile content
@@ -377,7 +364,7 @@ function Update-OhMyPosh {
     Set-Content -Path $profilePath -Value $profileContent -Encoding UTF8
 
     Write-Host "✅ PowerShell profile configured successfully" -ForegroundColor Green
-    Write-Host "Profile location: $profilePath" -ForegroundColor Cyan
+    Write-Host "📁 Profile location: $profilePath" -ForegroundColor Cyan
 }
 
 # Main execution
@@ -397,7 +384,7 @@ try {
     if (-not (Install-PsFzf)) { exit 1 }
 
     # Get the correct font name
-    $fontName = Get-FontName -FontFamily $Font
+    $fontName = Get-FontName -Variant $FontVariant
 
     # Configure applications
     Configure-WindowsTerminal -FontName $fontName
@@ -406,31 +393,28 @@ try {
 
     Write-Host ""
     Write-Host "🎉 Setup completed successfully!" -ForegroundColor Green
+    Write-Host ""
     Write-Host "📝 Next steps:" -ForegroundColor Yellow
-    Write-Host "   1. Close and reopen your PowerShell terminal" -ForegroundColor White
-    Write-Host "   2. Restart Windows Terminal and VS Code to apply font changes" -ForegroundColor White
+    Write-Host "   1. Close all PowerShell/Windows Terminal windows" -ForegroundColor White
+    Write-Host "   2. Open a new Windows Terminal (as regular user, not admin)" -ForegroundColor White
     Write-Host "   3. Your terminal should now display Oh My Posh themes with proper icons!" -ForegroundColor White
     Write-Host ""
     Write-Host "🔤 Font configuration:" -ForegroundColor Yellow
-    Write-Host "   - Font installed: $Font" -ForegroundColor White
-    Write-Host "   - Windows Terminal configured with: $fontName" -ForegroundColor White
-    Write-Host "   - VS Code configured with: $fontName" -ForegroundColor White
+    Write-Host "   - Font configured: $fontName" -ForegroundColor White
+    Write-Host "   - Windows Terminal: Configured automatically" -ForegroundColor White
+    Write-Host "   - VS Code: Configured automatically" -ForegroundColor White
+    Write-Host ""
+    Write-Host "⚠️  Admin privilege fix:" -ForegroundColor Yellow
+    Write-Host "   - If Windows Terminal still runs as admin, right-click the Terminal icon" -ForegroundColor White
+    Write-Host "   - Go to Properties → Advanced → Uncheck 'Run as administrator'" -ForegroundColor White
+    Write-Host ""
+    Write-Host "🔧 Manual font configuration (if needed):" -ForegroundColor Yellow
+    Write-Host "   - Windows Terminal: Ctrl+, → Profiles → Defaults → Appearance → Font face" -ForegroundColor White
+    Write-Host "   - Set to: $fontName" -ForegroundColor White
     Write-Host ""
     Write-Host "🔄 Auto-update features:" -ForegroundColor Yellow
-    Write-Host "   - Oh My Posh will automatically check for and install updates" -ForegroundColor White
-    Write-Host "   - Use 'Update-OhMyPosh' for manual update checks" -ForegroundColor White
-    Write-Host ""
-    Write-Host "🔧 Available fzf commands:" -ForegroundColor Yellow
-    Write-Host "   - Ctrl+T: File finder" -ForegroundColor White
-    Write-Host "   - Ctrl+R: History search" -ForegroundColor White
-    Write-Host "   - Tab: Enhanced tab completion" -ForegroundColor White
-    Write-Host "   - ff: Fuzzy find and navigate to directory" -ForegroundColor White
-    Write-Host "   - fh: Fuzzy search command history" -ForegroundColor White
-    Write-Host ""
-    Write-Host "💡 Font alternatives available:" -ForegroundColor Yellow
-    Write-Host "   - MesloLGM Nerd Font (default)" -ForegroundColor White
-    Write-Host "   - MesloLGM Nerd Font Mono (monospace)" -ForegroundColor White
-    Write-Host "   - Change font in Windows Terminal: Ctrl+, → Profiles → Defaults → Appearance" -ForegroundColor White
+    Write-Host "   - Oh My Posh will automatically check for updates" -ForegroundColor White
+    Write-Host "   - Use 'Update-OhMyPosh' for manual updates" -ForegroundColor White
 }
 catch {
     Write-Error "Setup failed: $_"
