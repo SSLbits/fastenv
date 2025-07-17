@@ -7,10 +7,24 @@ param(
     [string]$Theme = "quick-term"
 )
 
-# Check for environment variable override
+# Check for environment variable override with path extraction
 if ($env:POSH_THEME) {
-    $Theme = $env:POSH_THEME
-    Write-Host "🎨 Using theme from environment variable: $Theme" -ForegroundColor Cyan
+    $envTheme = $env:POSH_THEME
+
+    # If it's a full path, extract just the theme name
+    if ($envTheme -match '\\([^\\]+)\.omp\.json$') {
+        $Theme = $matches[1]
+        Write-Host "🎨 Using theme from environment variable (extracted): $Theme" -ForegroundColor Cyan
+    } elseif ($envTheme -match '^[^\\/:]+$') {
+        # It's just a theme name (no path separators)
+        $Theme = $envTheme
+        Write-Host "🎨 Using theme from environment variable: $Theme" -ForegroundColor Cyan
+    } else {
+        Write-Warning "Invalid theme format in environment variable: $envTheme"
+        Write-Info "Expected theme name (e.g., 'quick-term') or valid path"
+        Write-Info "Using default theme: quick-term"
+        $Theme = "quick-term"
+    }
 }
 
 # Color functions
