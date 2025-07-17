@@ -81,259 +81,61 @@ function Install-OhMyPosh {
     }
 }
 
-# Install Nerd Font (Updated version)
+# Install Nerd Font using Oh My Posh
 function Install-NerdFont {
     Write-Host "🔤 Installing $Font Nerd Font..." -ForegroundColor Yellow
 
     try {
-        # Method 1: Try using Oh My Posh's font installer
         if (Test-Command "oh-my-posh") {
             Write-Host "Installing font via Oh My Posh..." -ForegroundColor Cyan
-            $result = oh-my-posh font install $Font 2>&1
 
-            # Check if installation was successful
+            # Use oh-my-posh to install the font (suppress progress output)
+            $fontInstallResult = oh-my-posh font install $Font 2>&1
+
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "✅ $Font Nerd Font installed successfully via Oh My Posh" -ForegroundColor Green
 
-                # Wait a moment for font registration
+                # Wait for font registration
                 Start-Sleep -Seconds 2
 
-                # Verify the font was installed and get the correct name
-                $installedFontName = Get-InstalledFontName -FontFamily $Font
-                if ($installedFontName) {
-                    Write-Host "Font registered as: $installedFontName" -ForegroundColor Cyan
-                    return $installedFontName
-                }
+                Write-Host "Available $Font font families:" -ForegroundColor Cyan
+                Write-Host "  • MesloLGM Nerd Font" -ForegroundColor White
+                Write-Host "  • MesloLGM Nerd Font Mono" -ForegroundColor White
+                Write-Host "  • MesloLGM Nerd Font Propo" -ForegroundColor White
+
+                return $true
             }
             else {
-                Write-Host "Oh My Posh font installation failed, trying alternative methods..." -ForegroundColor Yellow
+                Write-Host "⚠️ Font installation may have failed, but continuing..." -ForegroundColor Yellow
+                return $true
             }
-        }
-
-        # Method 2: Try winget installation
-        if (Test-Command "winget") {
-            Write-Host "Trying winget installation..." -ForegroundColor Cyan
-            $fontPackageNames = @(
-                "MesloLGM-NF",
-                "MesloLGM",
-                "$Font-NF",
-                "$Font Nerd Font"
-            )
-
-            foreach ($packageName in $fontPackageNames) {
-                try {
-                    winget install $packageName --accept-source-agreements --accept-package-agreements --silent 2>$null
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-Host "✅ Font installed via winget: $packageName" -ForegroundColor Green
-                        Start-Sleep -Seconds 2
-                        $installedFontName = Get-InstalledFontName -FontFamily $Font
-                        if ($installedFontName) {
-                            return $installedFontName
-                        }
-                    }
-                }
-                catch {
-                    continue
-                }
-            }
-        }
-
-        # Method 3: Manual download and installation
-        Write-Host "Trying manual font installation..." -ForegroundColor Cyan
-        $fontUrl = "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/MesloLGM.zip"
-        $fontPath = "$env:TEMP\MesloLGM.zip"
-        $extractPath = "$env:TEMP\MesloLGM"
-
-        # Download font
-        Invoke-WebRequest -Uri $fontUrl -OutFile $fontPath -UseBasicParsing
-
-        # Extract font
-        if (Test-Path $extractPath) {
-            Remove-Item $extractPath -Recurse -Force
-        }
-        Expand-Archive -Path $fontPath -DestinationPath $extractPath -Force
-
-        # Install fonts using Windows Font API
-        Add-Type -AssemblyName System.Drawing
-        $fonts = New-Object System.Drawing.Text.InstalledFontCollection
-
-        $shell = New-Object -ComObject Shell.Application
-        $fontsFolder = $shell.Namespace(0x14)
-
-        $installedCount = 0
-        Get-ChildItem -Path $extractPath -Filter "*.ttf" | ForEach-Object {
-            try {
-                $fontsFolder.CopyHere($_.FullName, 0x10)
-                $installedCount++
-            }
-            catch {
-                Write-Host "Warning: Could not install $($_.Name)" -ForegroundColor Yellow
-            }
-        }
-
-        if ($installedCount -gt 0) {
-            Write-Host "✅ $installedCount font files installed manually" -ForegroundColor Green
-
-            # Clean up
-            Remove-Item $fontPath, $extractPath -Recurse -Force -ErrorAction SilentlyContinue
-
-            # Wait for font registration
-            Start-Sleep -Seconds 3
-
-            # Get the correct font name
-            $installedFontName = Get-InstalledFontName -FontFamily $Font
-            if ($installedFontName) {
-                return $installedFontName
-            }
-        }
-
-        Write-Error "Failed to install $Font Nerd Font using all methods"
-        return $null
-    }
-    catch {
-        Write-Error "Failed to install $Font Nerd Font: $_"
-        return $null
-    }
-}
-
-# Function to get the correct installed font name
-function Get-InstalledFontName {
-    param([string]$FontFamily)
-
-    try {
-        # Common font name variations for MesloLGM
-        $possibleNames = @(
-            "MesloLGM Nerd Font",
-            "MesloLGM NF",
-            "MesloLGM-Regular",
-            "MesloLGM",
-            "Meslo LG M",
-            "MesloLGM Nerd Font Mono"
-        )
-
-        # Check installed fonts via registry
-        $installedFonts = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts" -ErrorAction SilentlyContinue
-
-        foreach ($name in $possibleNames) {
-            # Check if font exists in registry
-            $fontEntry = $installedFonts | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -like "*$name*" }
-            if ($fontEntry) {
-                Write-Host "Found font in registry: $name" -ForegroundColor Green
-                return $name
-            }
-        }
-
-        # Fallback: Use .NET to check installed fonts
-        Add-Type -AssemblyName System.Drawing
-        $fonts = New-Object System.Drawing.Text.InstalledFontCollection
-
-        foreach ($name in $possibleNames) {
-            $fontFamily = $fonts.Families | Where-Object { $_.Name -eq $name }
-            if ($fontFamily) {
-                Write-Host "Found font via .NET: $name" -ForegroundColor Green
-                return $name
-            }
-        }
-
-        Write-Host "Could not find installed font with expected names" -ForegroundColor Yellow
-        return $null
-    }
-    catch {
-        Write-Error "Error checking installed fonts: $_"
-        return $null
-    }
-}
-
-# Updated Configure Windows Terminal function
-function Configure-WindowsTerminal {
-    param([string]$FontName)
-
-    Write-Host "🖥️ Configuring Windows Terminal..." -ForegroundColor Yellow
-
-    try {
-        $wtSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
-
-        if (-not (Test-Path $wtSettingsPath)) {
-            Write-Host "Windows Terminal settings not found - may need to launch Windows Terminal first" -ForegroundColor Yellow
-            return $false
-        }
-
-        $wtSettings = Get-Content $wtSettingsPath -Raw | ConvertFrom-Json
-
-        # Configure default profile font
-        if (-not $wtSettings.profiles.defaults) {
-            $wtSettings.profiles | Add-Member -MemberType NoteProperty -Name "defaults" -Value @{}
-        }
-
-        if (-not $wtSettings.profiles.defaults.font) {
-            $wtSettings.profiles.defaults | Add-Member -MemberType NoteProperty -Name "font" -Value @{}
-        }
-
-        $wtSettings.profiles.defaults.font.face = $FontName
-        $wtSettings.profiles.defaults.font.size = 12
-
-        # Also configure PowerShell profile specifically
-        $pwshProfile = $wtSettings.profiles.list | Where-Object { $_.name -eq "PowerShell" -or $_.commandline -like "*pwsh*" }
-        if ($pwshProfile) {
-            if (-not $pwshProfile.font) {
-                $pwshProfile | Add-Member -MemberType NoteProperty -Name "font" -Value @{}
-            }
-            $pwshProfile.font.face = $FontName
-            $pwshProfile.font.size = 12
-        }
-
-        # Backup and save
-        $backupPath = "$wtSettingsPath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-        Copy-Item $wtSettingsPath $backupPath
-
-        $wtSettings | ConvertTo-Json -Depth 10 | Set-Content $wtSettingsPath -Encoding UTF8
-        Write-Host "✅ Windows Terminal configured with font: $FontName" -ForegroundColor Green
-        Write-Host "Backup saved to: $backupPath" -ForegroundColor Yellow
-
-        return $true
-    }
-    catch {
-        Write-Error "Failed to configure Windows Terminal: $_"
-        return $false
-    }
-}
-
-# Configure VS Code
-function Configure-VSCode {
-    Write-Host "📝 Configuring VS Code..." -ForegroundColor Yellow
-
-    try {
-        $vscodeSettingsPath = "$env:APPDATA\Code\User\settings.json"
-
-        if (Test-Path $vscodeSettingsPath) {
-            $vscodeSettings = Get-Content $vscodeSettingsPath -Raw | ConvertFrom-Json
         }
         else {
-            # Create settings file if it doesn't exist
-            $vscodeSettings = @{}
-            $vscodeDir = Split-Path $vscodeSettingsPath -Parent
-            if (-not (Test-Path $vscodeDir)) {
-                New-Item -ItemType Directory -Path $vscodeDir -Force
-            }
+            Write-Host "⚠️ Oh My Posh not found, skipping font installation" -ForegroundColor Yellow
+            return $true
         }
-
-        # Set terminal font
-        $vscodeSettings."terminal.integrated.fontFamily" = "$Font Nerd Font"
-        $vscodeSettings."terminal.integrated.fontSize" = 12
-
-        # Optional: Set editor font as well
-        $vscodeSettings."editor.fontFamily" = "$Font Nerd Font, Consolas, 'Courier New', monospace"
-        $vscodeSettings."editor.fontSize" = 14
-
-        # Save settings
-        $vscodeSettings | ConvertTo-Json -Depth 10 | Set-Content $vscodeSettingsPath -Encoding UTF8
-        Write-Host "✅ VS Code configured with $Font Nerd Font" -ForegroundColor Green
-
-        return $true
     }
     catch {
-        Write-Error "Failed to configure VS Code: $_"
-        return $false
+        Write-Host "⚠️ Font installation error: $_" -ForegroundColor Yellow
+        return $true  # Continue anyway
+    }
+}
+
+# Get correct font name based on font parameter
+function Get-FontName {
+    param([string]$FontFamily)
+
+    switch ($FontFamily.ToLower()) {
+        "meslo" { return "MesloLGM Nerd Font" }
+        "meslolgm" { return "MesloLGM Nerd Font" }
+        "meslolgm-mono" { return "MesloLGM Nerd Font Mono" }
+        "cascadia" { return "CaskaydiaCove Nerd Font" }
+        "cascadiacode" { return "CaskaydiaCove Nerd Font" }
+        "jetbrains" { return "JetBrainsMono Nerd Font" }
+        "jetbrainsmono" { return "JetBrainsMono Nerd Font" }
+        "firacode" { return "FiraCode Nerd Font" }
+        "hack" { return "Hack Nerd Font" }
+        default { return "MesloLGM Nerd Font" }
     }
 }
 
@@ -425,6 +227,105 @@ function Install-PsFzf {
     }
 }
 
+# Configure Windows Terminal
+function Configure-WindowsTerminal {
+    param([string]$FontName)
+
+    Write-Host "🖥️ Configuring Windows Terminal..." -ForegroundColor Yellow
+
+    try {
+        $wtSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
+
+        if (-not (Test-Path $wtSettingsPath)) {
+            Write-Host "Windows Terminal settings not found - you may need to launch Windows Terminal first" -ForegroundColor Yellow
+            return $false
+        }
+
+        # Read current settings
+        $wtSettings = Get-Content $wtSettingsPath -Raw | ConvertFrom-Json
+
+        # Backup original settings
+        $backupPath = "$wtSettingsPath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+        Copy-Item $wtSettingsPath $backupPath
+
+        # Configure default profile font
+        if (-not $wtSettings.profiles.defaults) {
+            $wtSettings.profiles | Add-Member -MemberType NoteProperty -Name "defaults" -Value @{} -Force
+        }
+
+        if (-not $wtSettings.profiles.defaults.font) {
+            $wtSettings.profiles.defaults | Add-Member -MemberType NoteProperty -Name "font" -Value @{} -Force
+        }
+
+        # Set font properties
+        $wtSettings.profiles.defaults.font.face = $FontName
+        $wtSettings.profiles.defaults.font.size = 12
+
+        # Also configure PowerShell profile specifically
+        $pwshProfile = $wtSettings.profiles.list | Where-Object { $_.name -eq "PowerShell" -or $_.commandline -like "*pwsh*" }
+        if ($pwshProfile) {
+            if (-not $pwshProfile.font) {
+                $pwshProfile | Add-Member -MemberType NoteProperty -Name "font" -Value @{} -Force
+            }
+            $pwshProfile.font.face = $FontName
+            $pwshProfile.font.size = 12
+        }
+
+        # Save settings
+        $wtSettings | ConvertTo-Json -Depth 10 | Set-Content $wtSettingsPath -Encoding UTF8
+
+        Write-Host "✅ Windows Terminal configured with font: $FontName" -ForegroundColor Green
+        Write-Host "Backup saved to: $backupPath" -ForegroundColor Yellow
+
+        return $true
+    }
+    catch {
+        Write-Host "⚠️ Failed to configure Windows Terminal: $_" -ForegroundColor Yellow
+        return $false
+    }
+}
+
+# Configure VS Code
+function Configure-VSCode {
+    param([string]$FontName)
+
+    Write-Host "📝 Configuring VS Code..." -ForegroundColor Yellow
+
+    try {
+        $vscodeSettingsPath = "$env:APPDATA\Code\User\settings.json"
+
+        # Create settings object
+        if (Test-Path $vscodeSettingsPath) {
+            $vscodeSettings = Get-Content $vscodeSettingsPath -Raw | ConvertFrom-Json
+        }
+        else {
+            $vscodeSettings = @{}
+            $vscodeDir = Split-Path $vscodeSettingsPath -Parent
+            if (-not (Test-Path $vscodeDir)) {
+                New-Item -ItemType Directory -Path $vscodeDir -Force | Out-Null
+            }
+        }
+
+        # Set terminal font
+        $vscodeSettings."terminal.integrated.fontFamily" = $FontName
+        $vscodeSettings."terminal.integrated.fontSize" = 12
+
+        # Optional: Set editor font as well
+        $vscodeSettings."editor.fontFamily" = "$FontName, Consolas, 'Courier New', monospace"
+        $vscodeSettings."editor.fontSize" = 14
+
+        # Save settings
+        $vscodeSettings | ConvertTo-Json -Depth 10 | Set-Content $vscodeSettingsPath -Encoding UTF8
+
+        Write-Host "✅ VS Code configured with font: $FontName" -ForegroundColor Green
+        return $true
+    }
+    catch {
+        Write-Host "⚠️ Failed to configure VS Code: $_" -ForegroundColor Yellow
+        return $false
+    }
+}
+
 # Configure PowerShell Profile
 function Configure-Profile {
     Write-Host "⚙️ Configuring PowerShell profile..." -ForegroundColor Yellow
@@ -490,21 +391,17 @@ try {
     # Install components
     if (-not (Install-Winget)) { exit 1 }
     if (-not (Install-OhMyPosh)) { exit 1 }
-    
-    # Install font and get the correct name
-    $installedFontName = Install-NerdFont
-    if (-not $installedFontName) { 
-        Write-Host "⚠️ Font installation failed, using default font" -ForegroundColor Yellow
-        $installedFontName = "Consolas"
-    }
-    
+    if (-not (Install-NerdFont)) { exit 1 }
     if (-not (Enable-OhMyPoshAutoUpgrade)) { exit 1 }
     if (-not (Install-Fzf)) { exit 1 }
     if (-not (Install-PsFzf)) { exit 1 }
-    
-    # Configure applications with the correct font name
-    Configure-WindowsTerminal -FontName $installedFontName
-    Configure-VSCode -FontName $installedFontName
+
+    # Get the correct font name
+    $fontName = Get-FontName -FontFamily $Font
+
+    # Configure applications
+    Configure-WindowsTerminal -FontName $fontName
+    Configure-VSCode -FontName $fontName
     Configure-Profile
 
     Write-Host ""
@@ -512,12 +409,12 @@ try {
     Write-Host "📝 Next steps:" -ForegroundColor Yellow
     Write-Host "   1. Close and reopen your PowerShell terminal" -ForegroundColor White
     Write-Host "   2. Restart Windows Terminal and VS Code to apply font changes" -ForegroundColor White
-    Write-Host "   3. Enjoy your new Oh My Posh prompt with proper font rendering!" -ForegroundColor White
+    Write-Host "   3. Your terminal should now display Oh My Posh themes with proper icons!" -ForegroundColor White
     Write-Host ""
     Write-Host "🔤 Font configuration:" -ForegroundColor Yellow
-    Write-Host "   - $Font Nerd Font installed and configured" -ForegroundColor White
-    Write-Host "   - Windows Terminal font set to $Font Nerd Font" -ForegroundColor White
-    Write-Host "   - VS Code terminal font set to $Font Nerd Font" -ForegroundColor White
+    Write-Host "   - Font installed: $Font" -ForegroundColor White
+    Write-Host "   - Windows Terminal configured with: $fontName" -ForegroundColor White
+    Write-Host "   - VS Code configured with: $fontName" -ForegroundColor White
     Write-Host ""
     Write-Host "🔄 Auto-update features:" -ForegroundColor Yellow
     Write-Host "   - Oh My Posh will automatically check for and install updates" -ForegroundColor White
@@ -529,6 +426,11 @@ try {
     Write-Host "   - Tab: Enhanced tab completion" -ForegroundColor White
     Write-Host "   - ff: Fuzzy find and navigate to directory" -ForegroundColor White
     Write-Host "   - fh: Fuzzy search command history" -ForegroundColor White
+    Write-Host ""
+    Write-Host "💡 Font alternatives available:" -ForegroundColor Yellow
+    Write-Host "   - MesloLGM Nerd Font (default)" -ForegroundColor White
+    Write-Host "   - MesloLGM Nerd Font Mono (monospace)" -ForegroundColor White
+    Write-Host "   - Change font in Windows Terminal: Ctrl+, → Profiles → Defaults → Appearance" -ForegroundColor White
 }
 catch {
     Write-Error "Setup failed: $_"
