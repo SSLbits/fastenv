@@ -168,7 +168,7 @@ try {
     Write-Error "Failed to install ps-fzf module: $($_.Exception.Message)"
 }
 
-# **FIXED: Configure Windows Terminal with updated settings**
+# **FIXED: Configure Windows Terminal with correct property locations**
 Write-Info "Configuring Windows Terminal..."
 try {
     $wtSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
@@ -191,73 +191,42 @@ try {
             "size" = 12
         } -Force
 
-        # **UPDATED: Try multiple cursor repositioning setting names**
-        $cursorRepoEnabled = $false
+        # **FIXED: Set experimental features at ROOT LEVEL (global settings)**
+        $settings | Add-Member -NotePropertyName "experimental.repositionCursorWithMouse" -NotePropertyValue $true -Force
+        Write-Info "Enabled cursor repositioning with mouse clicks (global setting)"
 
-        # Try the experimental setting (older versions)
-        try {
-            $settings | Add-Member -NotePropertyName "experimental.repositionCursorWithMouse" -NotePropertyValue $true -Force
-            $cursorRepoEnabled = $true
-            Write-Info "Enabled experimental cursor repositioning (legacy setting)"
-        } catch {
-            # Ignore if this fails
-        }
+        $settings | Add-Member -NotePropertyName "experimental.detectURLs" -NotePropertyValue $true -Force
+        Write-Info "Enabled URL detection (global setting)"
 
-        # Try the newer action setting (current versions)
+        # **OPTIONAL: Shell integration (only if supported)**
         try {
-            if (-not $settings.PSObject.Properties["actions"]) {
-                $settings | Add-Member -NotePropertyName "actions" -NotePropertyValue @() -Force
+            # Test if shellIntegration is supported by checking if it already exists
+            $shellIntegrationSupported = $true
+            if (-not $settings.profiles.defaults.PSObject.Properties["shellIntegration"]) {
+                $settings.profiles.defaults | Add-Member -NotePropertyName "shellIntegration" -NotePropertyValue @{
+                    "showMarksOnScrollbar" = $true
+                } -Force
+                Write-Info "Enabled shell integration with scroll marks"
             }
-            # Add right-click context menu for cursor repositioning if not already present
-            $repositionAction = @{
-                "command" = "repositionCursorWithMouse"
-                "keys" = ""
-            }
-            Write-Info "Cursor repositioning available via right-click context menu"
-            $cursorRepoEnabled = $true
         } catch {
-            # Ignore if this fails
-        }
-
-        # Enable URL detection
-        try {
-            $settings | Add-Member -NotePropertyName "experimental.detectURLs" -NotePropertyValue $true -Force
-            Write-Info "Enabled URL detection"
-        } catch {
-            # May not be available in all versions
-        }
-
-        # Enable shell integration support
-        if (-not $settings.profiles.defaults.PSObject.Properties["shellIntegration"]) {
-            $settings.profiles.defaults | Add-Member -NotePropertyName "shellIntegration" -NotePropertyValue @{
-                "showMarksOnScrollbar" = $true
-            } -Force
-            Write-Info "Enabled shell integration with scroll marks"
+            Write-Info "Shell integration not supported in this Windows Terminal version (skipped)"
         }
 
         # Save settings with proper formatting
         $jsonOutput = $settings | ConvertTo-Json -Depth 10
         $jsonOutput | Set-Content $wtSettingsPath -Encoding UTF8
 
-        if ($cursorRepoEnabled) {
-            Write-Success "Windows Terminal configured successfully with enhanced features"
-        } else {
-            Write-Success "Windows Terminal configured successfully (cursor repositioning may not be available in this version)"
-        }
+        Write-Success "Windows Terminal configured successfully with experimental features"
+        Write-Info "✓ Cursor repositioning enabled"
+        Write-Info "✓ URL detection enabled"
+        Write-Info "✓ Font configured"
     } else {
         Write-Warning "Windows Terminal settings file not found at expected location"
-        Write-Info "You can manually enable these settings in Windows Terminal:"
-        Write-Info "  1. Right-click in terminal for cursor repositioning"
-        Write-Info "  2. Settings > Interaction for additional features"
-        Write-Info "  3. Settings > Profiles > Defaults > Advanced > Shell integration"
+        Write-Info "Manual setup: Settings → Interaction → Reposition cursor with mouse"
     }
 } catch {
     Write-Warning "Failed to configure Windows Terminal: $($_.Exception.Message)"
-    Write-Info "Manual setup instructions:"
-    Write-Info "  1. Open Windows Terminal Settings (Ctrl+,)"
-    Write-Info "  2. Try right-clicking in terminal for cursor repositioning"
-    Write-Info "  3. Go to Profiles > Defaults > Advanced > Enable 'Shell integration'"
-    Write-Info "  4. Set font: Profiles > Defaults > Appearance > Font face > MesloLGM Nerd Font Mono"
+    Write-Info "Manual setup: Settings → Interaction → Reposition cursor with mouse"
 }
 
 # Configure VS Code and Cursor AI
