@@ -1,5 +1,5 @@
 # PowerShell Environment Setup Script with Theme Support
-# Author: Enhanced version with theme selection, Cursor AI support, and experimental features
+# Author: Enhanced version with theme selection and Cursor AI support
 # Date: 2025-08-22
 
 param(
@@ -168,73 +168,53 @@ try {
     Write-Error "Failed to install ps-fzf module: $($_.Exception.Message)"
 }
 
-# **FINAL: Windows Terminal configuration with manual activation instructions**
+# **CLEANED: Configure Windows Terminal (without experimental cursor features)**
 Write-Info "Configuring Windows Terminal..."
 try {
     $wtSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
     if (Test-Path $wtSettingsPath) {
-        # Backup first
-        $backupPath = "$wtSettingsPath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-        Copy-Item $wtSettingsPath $backupPath
-
-        # Read existing settings
+        # Read current settings
         $settingsContent = Get-Content $wtSettingsPath -Raw
         $settings = $settingsContent | ConvertFrom-Json
 
-        # Convert to hashtable for reliable property handling
-        $newSettings = @{}
-        $settings.PSObject.Properties | ForEach-Object { $newSettings[$_.Name] = $_.Value }
-
-        # Ensure structure exists
-        if (-not $newSettings.profiles) { $newSettings.profiles = @{} }
-        if (-not $newSettings.profiles.defaults) { $newSettings.profiles.defaults = @{} }
-
-        # **CRITICAL: Set experimental features at ROOT LEVEL**
-        $newSettings['experimental.repositionCursorWithMouse'] = $true
-        $newSettings['experimental.detectURLs'] = $true
-
-        # Configure font
-        $newSettings.profiles.defaults.font = @{
-            "face" = "MesloLGM Nerd Font Mono"
-            "size" = 12
+        # Ensure correct JSON structure for modern Windows Terminal
+        if (-not $settings.profiles) { 
+            $settings | Add-Member -NotePropertyName "profiles" -NotePropertyValue @{} -Force
+        }
+        if (-not $settings.profiles.defaults) { 
+            $settings.profiles | Add-Member -NotePropertyName "defaults" -NotePropertyValue @{} -Force
         }
 
-        # Optional shell integration
-        try {
-            if (-not $newSettings.profiles.defaults.shellIntegration) {
-                $newSettings.profiles.defaults.shellIntegration = @{
-                    "showMarksOnScrollbar" = $true
-                }
-            }
-        } catch { }
+        # Configure font settings
+        $settings.profiles.defaults | Add-Member -NotePropertyName "font" -NotePropertyValue @{
+            "face" = "MesloLGM Nerd Font Mono"
+            "size" = 12
+        } -Force
 
-        # Save settings
-        $newSettings | ConvertTo-Json -Depth 10 | Set-Content $wtSettingsPath -Encoding UTF8
+        # Enable URL detection (stable feature)
+        $settings | Add-Member -NotePropertyName "experimental.detectURLs" -NotePropertyValue $true -Force
+        Write-Info "Enabled URL detection"
 
-        Write-Success "Windows Terminal JSON configured successfully"
-        Write-Info "✓ experimental.repositionCursorWithMouse = true (set in JSON)"
-        Write-Info "✓ experimental.detectURLs = true (set in JSON)"
-        Write-Info "✓ Font: MesloLGM Nerd Font Mono"
+        # Enable shell integration support
+        if (-not $settings.profiles.defaults.PSObject.Properties["shellIntegration"]) {
+            $settings.profiles.defaults | Add-Member -NotePropertyName "shellIntegration" -NotePropertyValue @{
+                "showMarksOnScrollbar" = $true
+            } -Force
+            Write-Info "Enabled shell integration with scroll marks"
+        }
 
-        # **IMPORTANT: Manual activation instructions**
-        Write-Host "`n⚠️ IMPORTANT: One-time manual activation required!" -ForegroundColor Yellow
-        Write-Host "Windows Terminal 1.22.12111.0 requires manual UI toggle for experimental features:" -ForegroundColor Cyan
-        Write-Host "`n📝 One-time setup steps:" -ForegroundColor Yellow
-        Write-Host "   1. Close ALL Windows Terminal windows completely" -ForegroundColor Gray
-        Write-Host "   2. Open Windows Terminal" -ForegroundColor Gray
-        Write-Host "   3. Press Ctrl+, (Settings)" -ForegroundColor Gray
-        Write-Host "   4. Click 'Interaction' in left sidebar" -ForegroundColor Gray
-        Write-Host "   5. Find 'Reposition cursor with mouse'" -ForegroundColor Gray
-        Write-Host "   6. Toggle it OFF, then toggle it ON" -ForegroundColor Gray
-        Write-Host "   7. Close settings" -ForegroundColor Gray
-        Write-Host "   8. Test cursor repositioning by clicking in terminal" -ForegroundColor Gray
-        Write-Host "`n💡 This manual toggle is only needed ONCE to activate the feature!" -ForegroundColor Green
+        # Save settings with proper formatting
+        $jsonOutput = $settings | ConvertTo-Json -Depth 10
+        $jsonOutput | Set-Content $wtSettingsPath -Encoding UTF8
+        Write-Success "Windows Terminal configured successfully"
 
     } else {
-        Write-Warning "Windows Terminal settings file not found"
+        Write-Warning "Windows Terminal settings file not found at expected location"
+        Write-Info "Manual setup: Settings > Profiles > Defaults > Appearance > Font face > MesloLGM Nerd Font Mono"
     }
 } catch {
-    Write-Error "Configuration failed: $($_.Exception.Message)"
+    Write-Warning "Failed to configure Windows Terminal: $($_.Exception.Message)"
+    Write-Info "Manual setup: Settings > Profiles > Defaults > Appearance > Font face > MesloLGM Nerd Font Mono"
 }
 
 # Configure VS Code and Cursor AI
@@ -327,10 +307,6 @@ try {
 
     if (-not $editorsFound) {
         Write-Warning "Neither VS Code nor Cursor AI found in standard locations"
-        Write-Info "Checked locations:"
-        foreach ($location in $editorPaths) {
-            Write-Info "  - $($location.Path)"
-        }
         Write-Info "Manual configuration steps:"
         Write-Info "  1. Open your editor (VS Code or Cursor AI)"
         Write-Info "  2. Press Ctrl+, to open settings"
@@ -346,7 +322,7 @@ try {
     Write-Info "  4. Set to: MesloLGM Nerd Font Mono"
 }
 
-# **FIXED: Configure PowerShell profile without invalid experimental features**
+# Configure PowerShell profile
 Write-Info "Configuring PowerShell profile..."
 try {
     $profilePath = $PROFILE
@@ -364,12 +340,12 @@ try {
         Write-Info "Backed up existing profile to: $backupPath"
     }
 
-    # **FIXED: Create profile content without invalid experimental features**
+    # Create profile content without invalid experimental features
     $profileContent = @"
 # Oh My Posh initialization with $Theme theme and shell integration
 oh-my-posh init pwsh --config "`$env:POSH_THEMES_PATH\$Theme.omp.json" | Invoke-Expression
 
-# **FIXED: Enhanced PowerShell styling without experimental features**
+# Enhanced PowerShell styling
 # Configure file and directory colors (built-in feature in PowerShell 7.2+)
 if (`$PSVersionTable.PSVersion.Major -ge 7 -and `$PSVersionTable.PSVersion.Minor -ge 2) {
     `$PSStyle.FileInfo.Directory = "`$(`$PSStyle.Bold)`$(`$PSStyle.Foreground.Blue)"
@@ -425,7 +401,6 @@ Write-Host "`n📝 Next steps:" -ForegroundColor Yellow
 Write-Host "   1. Close all PowerShell/Windows Terminal windows" -ForegroundColor Gray
 Write-Host "   2. Open a new Windows Terminal (as regular user, not admin)" -ForegroundColor Gray
 Write-Host "   3. Your terminal should now display the $Theme theme with proper icons!" -ForegroundColor Gray
-Write-Host "   4. Try right-clicking in the terminal for cursor repositioning" -ForegroundColor Gray
 
 Write-Host "`n🎨 Theme usage:" -ForegroundColor Yellow
 Write-Host "   - Current theme: $Theme" -ForegroundColor Gray
@@ -434,10 +409,10 @@ Write-Host "   - Change theme: Edit your PowerShell profile or re-run script" -F
 
 Write-Host "`n🔧 Features enabled:" -ForegroundColor Yellow
 Write-Host "   - Enhanced shell integration with Oh My Posh" -ForegroundColor Gray
-Write-Host "   - Cursor repositioning (try right-clicking in terminal)" -ForegroundColor Gray
 Write-Host "   - URL detection in terminal output" -ForegroundColor Gray
 Write-Host "   - Predictive IntelliSense and enhanced completion" -ForegroundColor Gray
 Write-Host "   - Improved command history search" -ForegroundColor Gray
+Write-Host "   - Nerd Font configured for VS Code and Cursor AI" -ForegroundColor Gray
 
 Write-Host "`n🔧 Theme selection options:" -ForegroundColor Yellow
 Write-Host "   - Environment variable: `$env:POSH_THEME = 'atomic'" -ForegroundColor Gray
