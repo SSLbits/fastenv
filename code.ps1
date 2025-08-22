@@ -103,40 +103,20 @@ try {
     Write-Error "Failed to install Oh My Posh: $($_.Exception.Message)"
 }
 
-# **UPDATED: Install MesloLGM Nerd Font with better error handling and verification**
+# Install MesloLGM Nerd Font - SIMPLIFIED VERSION
 Write-Info "Installing MesloLGM Nerd Font..."
 try {
     Write-Info "Installing font via Oh My Posh..."
-    # Use the correct font name that oh-my-posh expects
     $fontProcess = Start-Process -FilePath "oh-my-posh" -ArgumentList @("font", "install", "meslo") -Wait -PassThru -NoNewWindow
 
     if ($fontProcess.ExitCode -eq 0) {
         Write-Success "MesloLGM Nerd Font installation completed"
-
-        # **ADDED: Verify font installation**
-        Start-Sleep -Seconds 2
-        $fontCheck = Get-ChildItem -Path "$env:WINDIR\Fonts" -Filter "*Meslo*" -ErrorAction SilentlyContinue
-        if ($fontCheck) {
-            Write-Success "Font files found in system fonts directory"
-        } else {
-            Write-Warning "Font files not found in expected location, but installation reported success"
-        }
+        # REMOVED: Unnecessary file system verification
     } else {
-        Write-Warning "Font installation process returned exit code: $($fontProcess.ExitCode)"
-        Write-Info "Trying alternative font installation method..."
-
-        # **ADDED: Alternative font installation using winget**
-        try {
-            winget install --id=DEVCOM.MesloLGSNerdFont --accept-package-agreements --accept-source-agreements
-            Write-Success "Font installed via winget as alternative method"
-        } catch {
-            Write-Warning "Alternative font installation also failed. You may need to install manually."
-            Write-Info "Download from: https://github.com/ryanoasis/nerd-fonts/releases/download/v3.0.2/Meslo.zip"
-        }
+        Write-Warning "Font installation failed with exit code: $($fontProcess.ExitCode)"
     }
 } catch {
     Write-Error "Failed to install MesloLGM Nerd Font: $($_.Exception.Message)"
-    Write-Info "Manual installation: Download from https://github.com/ryanoasis/nerd-fonts/releases/download/v3.0.2/Meslo.zip"
 }
 
 # Enable Oh My Posh auto-upgrade
