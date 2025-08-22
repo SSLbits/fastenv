@@ -1,6 +1,6 @@
 # PowerShell Environment Setup Script with Theme Support
 # Author: Enhanced version with theme selection and Cursor AI support
-# Date: 2025-08-22
+# Date: 2025-07-17
 
 param(
     [switch]$Force,
@@ -168,7 +168,7 @@ try {
     Write-Error "Failed to install ps-fzf module: $($_.Exception.Message)"
 }
 
-# **CLEANED: Configure Windows Terminal (without experimental cursor features)**
+# Configure Windows Terminal
 Write-Info "Configuring Windows Terminal..."
 try {
     $wtSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
@@ -185,42 +185,30 @@ try {
             $settings.profiles | Add-Member -NotePropertyName "defaults" -NotePropertyValue @{} -Force
         }
 
-        # Configure font settings
+        # Use correct property structure for font
         $settings.profiles.defaults | Add-Member -NotePropertyName "font" -NotePropertyValue @{
             "face" = "MesloLGM Nerd Font Mono"
             "size" = 12
         } -Force
 
-        # Enable URL detection (stable feature)
-        $settings | Add-Member -NotePropertyName "experimental.detectURLs" -NotePropertyValue $true -Force
-        Write-Info "Enabled URL detection"
-
-        # Enable shell integration support
-        if (-not $settings.profiles.defaults.PSObject.Properties["shellIntegration"]) {
-            $settings.profiles.defaults | Add-Member -NotePropertyName "shellIntegration" -NotePropertyValue @{
-                "showMarksOnScrollbar" = $true
-            } -Force
-            Write-Info "Enabled shell integration with scroll marks"
-        }
-
         # Save settings with proper formatting
         $jsonOutput = $settings | ConvertTo-Json -Depth 10
         $jsonOutput | Set-Content $wtSettingsPath -Encoding UTF8
         Write-Success "Windows Terminal configured successfully"
-
     } else {
         Write-Warning "Windows Terminal settings file not found at expected location"
-        Write-Info "Manual setup: Settings > Profiles > Defaults > Appearance > Font face > MesloLGM Nerd Font Mono"
+        Write-Info "Windows Terminal may not be installed or may be using a different settings location"
+        Write-Info "You can manually set the font in Windows Terminal: Settings > Profiles > Defaults > Appearance > Font face"
     }
 } catch {
     Write-Warning "Failed to configure Windows Terminal: $($_.Exception.Message)"
     Write-Info "Manual setup: Settings > Profiles > Defaults > Appearance > Font face > MesloLGM Nerd Font Mono"
 }
 
-# Configure VS Code and Cursor AI
+# **UPDATED: Configure VS Code AND Cursor AI**
 Write-Info "Configuring VS Code and Cursor AI..."
 try {
-    # Check multiple possible installation locations including Cursor AI
+    # **EXPANDED: Check multiple possible installation locations including Cursor AI**
     $editorPaths = @(
         @{ Path = "$env:APPDATA\Code\User\settings.json"; Name = "VS Code (User Install)" },
         @{ Path = "$env:APPDATA\Code - Insiders\User\settings.json"; Name = "VS Code Insiders (User)" },
@@ -290,7 +278,7 @@ try {
                 $editorSettings["terminal.integrated.fontFamily"] = "MesloLGM Nerd Font Mono"
                 $editorSettings["terminal.integrated.fontSize"] = 12
 
-                # Cursor AI specific font settings
+                # **ADDED: Cursor AI specific font settings**
                 if ($editorName -like "*Cursor*") {
                     # Cursor AI may use additional font settings
                     $editorSettings["editor.fontFamily"] = "MesloLGM Nerd Font Mono, 'Courier New', monospace"
@@ -307,6 +295,10 @@ try {
 
     if (-not $editorsFound) {
         Write-Warning "Neither VS Code nor Cursor AI found in standard locations"
+        Write-Info "Checked locations:"
+        foreach ($location in $editorPaths) {
+            Write-Info "  - $($location.Path)"
+        }
         Write-Info "Manual configuration steps:"
         Write-Info "  1. Open your editor (VS Code or Cursor AI)"
         Write-Info "  2. Press Ctrl+, to open settings"
@@ -340,42 +332,14 @@ try {
         Write-Info "Backed up existing profile to: $backupPath"
     }
 
-    # Create profile content without invalid experimental features
+    # Create new profile content with selected theme
     $profileContent = @"
-# Oh My Posh initialization with $Theme theme and shell integration
+# Oh My Posh initialization with $Theme theme
 oh-my-posh init pwsh --config "`$env:POSH_THEMES_PATH\$Theme.omp.json" | Invoke-Expression
 
-# Enhanced PowerShell styling
-# Configure file and directory colors (built-in feature in PowerShell 7.2+)
-if (`$PSVersionTable.PSVersion.Major -ge 7 -and `$PSVersionTable.PSVersion.Minor -ge 2) {
-    `$PSStyle.FileInfo.Directory = "`$(`$PSStyle.Bold)`$(`$PSStyle.Foreground.Blue)"
-    `$PSStyle.FileInfo.Executable = "`$(`$PSStyle.Bold)`$(`$PSStyle.Foreground.Green)"
-    `$PSStyle.FileInfo.Extension['.ps1'] = "`$(`$PSStyle.Foreground.Cyan)"
-}
-
-# PSFzf configuration with enhanced key bindings
+# PSFzf configuration
 Import-Module PSFzf
 Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
-
-# Enhanced shell integration and IntelliSense features
-if (`$PSVersionTable.PSVersion.Major -ge 7 -and `$PSVersionTable.PSVersion.Minor -ge 2) {
-    # Enable predictive IntelliSense
-    Set-PSReadLineOption -PredictionSource History
-    Set-PSReadLineOption -PredictionViewStyle ListView
-
-    # Enhanced command completion
-    Set-PSReadLineOption -ShowToolTips
-    Set-PSReadLineOption -HistorySearchCursorMovesToEnd
-}
-
-# Enhanced error handling and command completion
-Set-PSReadLineOption -BellStyle None
-Set-PSReadLineOption -EditMode Emacs
-Set-PSReadLineKeyHandler -Key Tab -Function Complete
-
-# Additional useful key bindings
-Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
-Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
 
 # Custom aliases and functions can be added below
 "@
@@ -384,11 +348,6 @@ Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
     $profileContent | Set-Content $profilePath -Encoding UTF8
     Write-Success "PowerShell profile configured successfully with $Theme theme"
     Write-Info "Profile location: $profilePath"
-    Write-Info "Shell integration features enabled:"
-    Write-Info "  • Enhanced file and directory colors"
-    Write-Info "  • Predictive IntelliSense (PowerShell 7.2+)"
-    Write-Info "  • Improved command completion"
-    Write-Info "  • Enhanced history search"
 } catch {
     Write-Error "Failed to configure PowerShell profile: $($_.Exception.Message)"
 }
@@ -406,13 +365,6 @@ Write-Host "`n🎨 Theme usage:" -ForegroundColor Yellow
 Write-Host "   - Current theme: $Theme" -ForegroundColor Gray
 Write-Host "   - Browse themes: https://ohmyposh.dev/docs/themes" -ForegroundColor Gray
 Write-Host "   - Change theme: Edit your PowerShell profile or re-run script" -ForegroundColor Gray
-
-Write-Host "`n🔧 Features enabled:" -ForegroundColor Yellow
-Write-Host "   - Enhanced shell integration with Oh My Posh" -ForegroundColor Gray
-Write-Host "   - URL detection in terminal output" -ForegroundColor Gray
-Write-Host "   - Predictive IntelliSense and enhanced completion" -ForegroundColor Gray
-Write-Host "   - Improved command history search" -ForegroundColor Gray
-Write-Host "   - Nerd Font configured for VS Code and Cursor AI" -ForegroundColor Gray
 
 Write-Host "`n🔧 Theme selection options:" -ForegroundColor Yellow
 Write-Host "   - Environment variable: `$env:POSH_THEME = 'atomic'" -ForegroundColor Gray
