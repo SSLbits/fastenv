@@ -92,7 +92,7 @@ try {
         winget install JanDeDobbeleer.OhMyPosh -s winget --accept-package-agreements --accept-source-agreements
         Write-Success "Oh My Posh installed successfully"
 
-        # **ADDED: Refresh PATH for current session**
+        # Refresh PATH for current session
         $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH","User")
         Write-Info "Environment PATH refreshed"
 
@@ -103,51 +103,45 @@ try {
     Write-Error "Failed to install Oh My Posh: $($_.Exception.Message)"
 }
 
-# Install MesloLGM Nerd Font with proper error handling
+# **UPDATED: Install MesloLGM Nerd Font with better error handling and verification**
 Write-Info "Installing MesloLGM Nerd Font..."
 try {
-    # Check if font is already installed
-    $fontInstalled = $false
-    try {
-        $fontCheck = Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts" -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like "*MesloLGM*" -or $_.PSPropertyName -like "*MesloLGM*" }
-        if ($fontCheck) { $fontInstalled = $true }
-    } catch {
-        # Font registry check failed, assume not installed
-    }
+    Write-Info "Installing font via Oh My Posh..."
+    # Use the correct font name that oh-my-posh expects
+    $fontProcess = Start-Process -FilePath "oh-my-posh" -ArgumentList @("font", "install", "meslo") -Wait -PassThru -NoNewWindow
 
-    if (-not $fontInstalled -or $Force) {
-        Write-Info "Installing font via Oh My Posh..."
-        # Install font with all output suppressed
-        $processArgs = @{
-            FilePath = "oh-my-posh"
-            ArgumentList = @("font", "install", "MesloLGM")
-            Wait = $true
-            NoNewWindow = $true
-            RedirectStandardOutput = [System.IO.Path]::GetTempFileName()
-            RedirectStandardError = [System.IO.Path]::GetTempFileName()
-        }
-        $process = Start-Process @processArgs -PassThru
+    if ($fontProcess.ExitCode -eq 0) {
+        Write-Success "MesloLGM Nerd Font installation completed"
 
-        # Clean up temp files
-        if (Test-Path $processArgs.RedirectStandardOutput) { Remove-Item $processArgs.RedirectStandardOutput -Force }
-        if (Test-Path $processArgs.RedirectStandardError) { Remove-Item $processArgs.RedirectStandardError -Force }
-
-        if ($process.ExitCode -eq 0) {
-            Write-Success "MesloLGM Nerd Font installation completed"
+        # **ADDED: Verify font installation**
+        Start-Sleep -Seconds 2
+        $fontCheck = Get-ChildItem -Path "$env:WINDIR\Fonts" -Filter "*Meslo*" -ErrorAction SilentlyContinue
+        if ($fontCheck) {
+            Write-Success "Font files found in system fonts directory"
         } else {
-            Write-Warning "Font installation may have failed, but continuing..."
+            Write-Warning "Font files not found in expected location, but installation reported success"
         }
     } else {
-        Write-Warning "MesloLGM Nerd Font already installed. Use -Force to reinstall."
+        Write-Warning "Font installation process returned exit code: $($fontProcess.ExitCode)"
+        Write-Info "Trying alternative font installation method..."
+
+        # **ADDED: Alternative font installation using winget**
+        try {
+            winget install --id=DEVCOM.MesloLGSNerdFont --accept-package-agreements --accept-source-agreements
+            Write-Success "Font installed via winget as alternative method"
+        } catch {
+            Write-Warning "Alternative font installation also failed. You may need to install manually."
+            Write-Info "Download from: https://github.com/ryanoasis/nerd-fonts/releases/download/v3.0.2/Meslo.zip"
+        }
     }
 } catch {
     Write-Error "Failed to install MesloLGM Nerd Font: $($_.Exception.Message)"
+    Write-Info "Manual installation: Download from https://github.com/ryanoasis/nerd-fonts/releases/download/v3.0.2/Meslo.zip"
 }
 
 # Enable Oh My Posh auto-upgrade
 Write-Info "Enabling Oh My Posh auto-upgrade..."
 try {
-    # **FIXED: Changed from 'oh-my-posh enable upgrade' to 'oh-my-posh upgrade'**
     oh-my-posh upgrade
     Write-Success "Oh My Posh auto-upgrade completed successfully"
 } catch {
@@ -161,7 +155,7 @@ try {
         winget install junegunn.fzf -s winget --accept-package-agreements --accept-source-agreements
         Write-Success "fzf installed successfully"
 
-        # **ADDED: Refresh PATH again after fzf installation**
+        # Refresh PATH again after fzf installation
         $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH","User")
         Write-Info "Environment PATH refreshed after fzf installation"
 
@@ -185,83 +179,123 @@ try {
     Write-Error "Failed to install ps-fzf module: $($_.Exception.Message)"
 }
 
-# Configure Windows Terminal
+# **UPDATED: Configure Windows Terminal with correct JSON structure**
 Write-Info "Configuring Windows Terminal..."
 try {
     $wtSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
     if (Test-Path $wtSettingsPath) {
         # Read current settings
-        $settings = Get-Content $wtSettingsPath -Raw | ConvertFrom-Json
+        $settingsContent = Get-Content $wtSettingsPath -Raw
+        $settings = $settingsContent | ConvertFrom-Json
 
-        # Ensure defaults exist
-        if (-not $settings.profiles) { $settings.profiles = @{} }
-        if (-not $settings.profiles.defaults) { $settings.profiles.defaults = @{} }
-
-        # Set font configuration
-        $settings.profiles.defaults.font = @{
-            face = "MesloLGM Nerd Font Mono"
-            size = 12
+        # **FIXED: Ensure correct JSON structure for modern Windows Terminal**
+        if (-not $settings.profiles) { 
+            $settings | Add-Member -NotePropertyName "profiles" -NotePropertyValue @{} -Force
+        }
+        if (-not $settings.profiles.defaults) { 
+            $settings.profiles | Add-Member -NotePropertyName "defaults" -NotePropertyValue @{} -Force
         }
 
+        # **FIXED: Use correct property structure for font**
+        $settings.profiles.defaults | Add-Member -NotePropertyName "font" -NotePropertyValue @{
+            "face" = "MesloLGM Nerd Font Mono"
+            "size" = 12
+        } -Force
+
         # Save settings with proper formatting
-        $settings | ConvertTo-Json -Depth 10 | Set-Content $wtSettingsPath -Encoding UTF8
+        $jsonOutput = $settings | ConvertTo-Json -Depth 10
+        $jsonOutput | Set-Content $wtSettingsPath -Encoding UTF8
         Write-Success "Windows Terminal configured successfully"
     } else {
         Write-Warning "Windows Terminal settings file not found at expected location"
-        Write-Info "You may need to manually set the font in Windows Terminal settings"
+        Write-Info "Windows Terminal may not be installed or may be using a different settings location"
+        Write-Info "You can manually set the font in Windows Terminal: Settings > Profiles > Defaults > Appearance > Font face"
     }
 } catch {
     Write-Warning "Failed to configure Windows Terminal: $($_.Exception.Message)"
-    Write-Info "You may need to manually set the font in Windows Terminal settings"
+    Write-Info "Manual setup: Settings > Profiles > Defaults > Appearance > Font face > MesloLGM Nerd Font Mono"
 }
 
-# Configure VS Code - Enhanced version
+# **UPDATED: Enhanced VS Code detection with multiple installation paths**
 Write-Info "Configuring VS Code..."
 try {
-    # Check for VS Code installation
+    # **EXPANDED: Check multiple possible VS Code installation locations**
     $vsCodePaths = @(
-        "$env:APPDATA\Code\User\settings.json",         # VS Code
-        "$env:APPDATA\Code - Insiders\User\settings.json" # VS Code Insiders
+        @{ Path = "$env:APPDATA\Code\User\settings.json"; Name = "VS Code (User Install)" },
+        @{ Path = "$env:APPDATA\Code - Insiders\User\settings.json"; Name = "VS Code Insiders (User)" },
+        @{ Path = "$env:PROGRAMDATA\Microsoft\Windows\Start Menu\Programs\Visual Studio Code"; Name = "VS Code (System Install)" }
     )
+
+    # **ADDED: Also check if VS Code is in PATH**
+    $vsCodeInPath = Get-Command "code" -ErrorAction SilentlyContinue
+    if ($vsCodeInPath) {
+        Write-Info "VS Code executable found in PATH: $($vsCodeInPath.Source)"
+    }
+
     $vsCodeFound = $false
 
-    foreach ($vsCodeSettingsPath in $vsCodePaths) {
-        $vsCodeDir = Split-Path $vsCodeSettingsPath -Parent
-        # Check if VS Code directory exists (indicates VS Code is installed)
-        if (Test-Path $vsCodeDir -PathType Container) {
+    foreach ($vsCodeInfo in $vsCodePaths) {
+        $vsCodePath = $vsCodeInfo.Path
+        $vsCodeName = $vsCodeInfo.Name
+        $vsCodeDir = Split-Path $vsCodePath -Parent
+
+        # **IMPROVED: Better detection logic**
+        $pathExists = $false
+        if ($vsCodePath.EndsWith("settings.json")) {
+            # For settings.json paths, check if the directory exists
+            $pathExists = Test-Path $vsCodeDir -PathType Container
+        } else {
+            # For other paths, check the path directly
+            $pathExists = Test-Path $vsCodePath
+        }
+
+        if ($pathExists -or $vsCodeInPath) {
             $vsCodeFound = $true
-            Write-Info "Found VS Code at: $vsCodeDir"
+            Write-Info "Found $vsCodeName"
 
-            # Initialize settings object
-            $vsCodeSettings = @{}
+            # Only process settings.json paths
+            if ($vsCodePath.EndsWith("settings.json")) {
+                # Initialize settings object
+                $vsCodeSettings = @{}
 
-            # Read existing settings if file exists
-            if (Test-Path $vsCodeSettingsPath) {
-                try {
-                    $existingContent = Get-Content $vsCodeSettingsPath -Raw
-                    if ($existingContent.Trim()) {
-                        $vsCodeSettings = $existingContent | ConvertFrom-Json -AsHashtable
+                # Read existing settings if file exists
+                if (Test-Path $vsCodePath) {
+                    try {
+                        $existingContent = Get-Content $vsCodePath -Raw
+                        if ($existingContent.Trim()) {
+                            $vsCodeSettings = $existingContent | ConvertFrom-Json -AsHashtable
+                        }
+                    } catch {
+                        Write-Warning "Could not parse existing VS Code settings, creating new ones"
+                        $vsCodeSettings = @{}
                     }
-                } catch {
-                    Write-Warning "Could not parse existing VS Code settings, creating new ones"
-                    $vsCodeSettings = @{}
+                } else {
+                    # Create directory if it doesn't exist
+                    if (-not (Test-Path $vsCodeDir)) {
+                        New-Item -ItemType Directory -Path $vsCodeDir -Force | Out-Null
+                        Write-Info "Created VS Code settings directory: $vsCodeDir"
+                    }
                 }
+
+                # Set terminal font settings
+                $vsCodeSettings["terminal.integrated.fontFamily"] = "MesloLGM Nerd Font Mono"
+                $vsCodeSettings["terminal.integrated.fontSize"] = 12
+
+                # Convert back to JSON and save
+                $jsonContent = $vsCodeSettings | ConvertTo-Json -Depth 10
+                $jsonContent | Set-Content $vsCodePath -Encoding UTF8
+                Write-Success "VS Code configured successfully: $vsCodeName"
             }
-
-            # Set terminal font settings
-            $vsCodeSettings["terminal.integrated.fontFamily"] = "MesloLGM Nerd Font Mono"
-            $vsCodeSettings["terminal.integrated.fontSize"] = 12
-
-            # Convert back to JSON and save
-            $jsonContent = $vsCodeSettings | ConvertTo-Json -Depth 10
-            $jsonContent | Set-Content $vsCodeSettingsPath -Encoding UTF8
-            Write-Success "VS Code configured successfully: $(Split-Path $vsCodeSettingsPath -Leaf)"
         }
     }
 
     if (-not $vsCodeFound) {
-        Write-Warning "VS Code not found or not installed"
-        Write-Info "If you have VS Code installed, you can manually set the font:"
+        Write-Warning "VS Code not found in standard locations"
+        Write-Info "Checked locations:"
+        foreach ($location in $vsCodePaths) {
+            Write-Info "  - $($location.Path)"
+        }
+        Write-Info "Manual configuration steps:"
         Write-Info "  1. Open VS Code"
         Write-Info "  2. Press Ctrl+, to open settings"
         Write-Info "  3. Search for 'terminal.integrated.fontFamily'"
