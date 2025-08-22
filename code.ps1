@@ -1,5 +1,5 @@
 # PowerShell Environment Setup Script with Theme Support
-# Author: Enhanced version with theme selection
+# Author: Enhanced version with theme selection and Cursor AI support
 # Date: 2025-07-17
 
 param(
@@ -103,7 +103,7 @@ try {
     Write-Error "Failed to install Oh My Posh: $($_.Exception.Message)"
 }
 
-# Install MesloLGM Nerd Font - SIMPLIFIED VERSION
+# Install MesloLGM Nerd Font
 Write-Info "Installing MesloLGM Nerd Font..."
 try {
     Write-Info "Installing font via Oh My Posh..."
@@ -111,12 +111,21 @@ try {
 
     if ($fontProcess.ExitCode -eq 0) {
         Write-Success "MesloLGM Nerd Font installation completed"
-        # REMOVED: Unnecessary file system verification
     } else {
         Write-Warning "Font installation failed with exit code: $($fontProcess.ExitCode)"
+        Write-Info "Trying alternative font installation method..."
+
+        try {
+            winget install --id=DEVCOM.MesloLGSNerdFont --accept-package-agreements --accept-source-agreements
+            Write-Success "Font installed via winget as alternative method"
+        } catch {
+            Write-Warning "Alternative font installation also failed. You may need to install manually."
+            Write-Info "Download from: https://github.com/ryanoasis/nerd-fonts/releases/download/v3.0.2/Meslo.zip"
+        }
     }
 } catch {
     Write-Error "Failed to install MesloLGM Nerd Font: $($_.Exception.Message)"
+    Write-Info "Manual installation: Download from https://github.com/ryanoasis/nerd-fonts/releases/download/v3.0.2/Meslo.zip"
 }
 
 # Enable Oh My Posh auto-upgrade
@@ -159,7 +168,7 @@ try {
     Write-Error "Failed to install ps-fzf module: $($_.Exception.Message)"
 }
 
-# **UPDATED: Configure Windows Terminal with correct JSON structure**
+# Configure Windows Terminal
 Write-Info "Configuring Windows Terminal..."
 try {
     $wtSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
@@ -168,7 +177,7 @@ try {
         $settingsContent = Get-Content $wtSettingsPath -Raw
         $settings = $settingsContent | ConvertFrom-Json
 
-        # **FIXED: Ensure correct JSON structure for modern Windows Terminal**
+        # Ensure correct JSON structure for modern Windows Terminal
         if (-not $settings.profiles) { 
             $settings | Add-Member -NotePropertyName "profiles" -NotePropertyValue @{} -Force
         }
@@ -176,7 +185,7 @@ try {
             $settings.profiles | Add-Member -NotePropertyName "defaults" -NotePropertyValue @{} -Force
         }
 
-        # **FIXED: Use correct property structure for font**
+        # Use correct property structure for font
         $settings.profiles.defaults | Add-Member -NotePropertyName "font" -NotePropertyValue @{
             "face" = "MesloLGM Nerd Font Mono"
             "size" = 12
@@ -196,95 +205,110 @@ try {
     Write-Info "Manual setup: Settings > Profiles > Defaults > Appearance > Font face > MesloLGM Nerd Font Mono"
 }
 
-# **UPDATED: Enhanced VS Code detection with multiple installation paths**
-Write-Info "Configuring VS Code..."
+# **UPDATED: Configure VS Code AND Cursor AI**
+Write-Info "Configuring VS Code and Cursor AI..."
 try {
-    # **EXPANDED: Check multiple possible VS Code installation locations**
-    $vsCodePaths = @(
+    # **EXPANDED: Check multiple possible installation locations including Cursor AI**
+    $editorPaths = @(
         @{ Path = "$env:APPDATA\Code\User\settings.json"; Name = "VS Code (User Install)" },
         @{ Path = "$env:APPDATA\Code - Insiders\User\settings.json"; Name = "VS Code Insiders (User)" },
+        @{ Path = "$env:APPDATA\Cursor\User\settings.json"; Name = "Cursor AI" },
         @{ Path = "$env:PROGRAMDATA\Microsoft\Windows\Start Menu\Programs\Visual Studio Code"; Name = "VS Code (System Install)" }
     )
 
-    # **ADDED: Also check if VS Code is in PATH**
+    # Check if executables are in PATH
     $vsCodeInPath = Get-Command "code" -ErrorAction SilentlyContinue
+    $cursorInPath = Get-Command "cursor" -ErrorAction SilentlyContinue
+
     if ($vsCodeInPath) {
         Write-Info "VS Code executable found in PATH: $($vsCodeInPath.Source)"
     }
+    if ($cursorInPath) {
+        Write-Info "Cursor AI executable found in PATH: $($cursorInPath.Source)"
+    }
 
-    $vsCodeFound = $false
+    $editorsFound = $false
 
-    foreach ($vsCodeInfo in $vsCodePaths) {
-        $vsCodePath = $vsCodeInfo.Path
-        $vsCodeName = $vsCodeInfo.Name
-        $vsCodeDir = Split-Path $vsCodePath -Parent
+    foreach ($editorInfo in $editorPaths) {
+        $editorPath = $editorInfo.Path
+        $editorName = $editorInfo.Name
+        $editorDir = Split-Path $editorPath -Parent
 
-        # **IMPROVED: Better detection logic**
+        # Better detection logic
         $pathExists = $false
-        if ($vsCodePath.EndsWith("settings.json")) {
-            # For settings.json paths, check if the directory exists
-            $pathExists = Test-Path $vsCodeDir -PathType Container
+        if ($editorPath.EndsWith("settings.json")) {
+            # For settings.json paths, check if the directory exists OR if corresponding executable exists
+            $pathExists = (Test-Path $editorDir -PathType Container) -or 
+                         ($editorName -like "*VS Code*" -and $vsCodeInPath) -or 
+                         ($editorName -like "*Cursor*" -and $cursorInPath)
         } else {
             # For other paths, check the path directly
-            $pathExists = Test-Path $vsCodePath
+            $pathExists = Test-Path $editorPath
         }
 
-        if ($pathExists -or $vsCodeInPath) {
-            $vsCodeFound = $true
-            Write-Info "Found $vsCodeName"
+        if ($pathExists) {
+            $editorsFound = $true
+            Write-Info "Found $editorName"
 
             # Only process settings.json paths
-            if ($vsCodePath.EndsWith("settings.json")) {
+            if ($editorPath.EndsWith("settings.json")) {
                 # Initialize settings object
-                $vsCodeSettings = @{}
+                $editorSettings = @{}
 
                 # Read existing settings if file exists
-                if (Test-Path $vsCodePath) {
+                if (Test-Path $editorPath) {
                     try {
-                        $existingContent = Get-Content $vsCodePath -Raw
+                        $existingContent = Get-Content $editorPath -Raw
                         if ($existingContent.Trim()) {
-                            $vsCodeSettings = $existingContent | ConvertFrom-Json -AsHashtable
+                            $editorSettings = $existingContent | ConvertFrom-Json -AsHashtable
                         }
                     } catch {
-                        Write-Warning "Could not parse existing VS Code settings, creating new ones"
-                        $vsCodeSettings = @{}
+                        Write-Warning "Could not parse existing $editorName settings, creating new ones"
+                        $editorSettings = @{}
                     }
                 } else {
                     # Create directory if it doesn't exist
-                    if (-not (Test-Path $vsCodeDir)) {
-                        New-Item -ItemType Directory -Path $vsCodeDir -Force | Out-Null
-                        Write-Info "Created VS Code settings directory: $vsCodeDir"
+                    if (-not (Test-Path $editorDir)) {
+                        New-Item -ItemType Directory -Path $editorDir -Force | Out-Null
+                        Write-Info "Created $editorName settings directory: $editorDir"
                     }
                 }
 
                 # Set terminal font settings
-                $vsCodeSettings["terminal.integrated.fontFamily"] = "MesloLGM Nerd Font Mono"
-                $vsCodeSettings["terminal.integrated.fontSize"] = 12
+                $editorSettings["terminal.integrated.fontFamily"] = "MesloLGM Nerd Font Mono"
+                $editorSettings["terminal.integrated.fontSize"] = 12
+
+                # **ADDED: Cursor AI specific font settings**
+                if ($editorName -like "*Cursor*") {
+                    # Cursor AI may use additional font settings
+                    $editorSettings["editor.fontFamily"] = "MesloLGM Nerd Font Mono, 'Courier New', monospace"
+                    $editorSettings["editor.fontLigatures"] = $true
+                }
 
                 # Convert back to JSON and save
-                $jsonContent = $vsCodeSettings | ConvertTo-Json -Depth 10
-                $jsonContent | Set-Content $vsCodePath -Encoding UTF8
-                Write-Success "VS Code configured successfully: $vsCodeName"
+                $jsonContent = $editorSettings | ConvertTo-Json -Depth 10
+                $jsonContent | Set-Content $editorPath -Encoding UTF8
+                Write-Success "$editorName configured successfully"
             }
         }
     }
 
-    if (-not $vsCodeFound) {
-        Write-Warning "VS Code not found in standard locations"
+    if (-not $editorsFound) {
+        Write-Warning "Neither VS Code nor Cursor AI found in standard locations"
         Write-Info "Checked locations:"
-        foreach ($location in $vsCodePaths) {
+        foreach ($location in $editorPaths) {
             Write-Info "  - $($location.Path)"
         }
         Write-Info "Manual configuration steps:"
-        Write-Info "  1. Open VS Code"
+        Write-Info "  1. Open your editor (VS Code or Cursor AI)"
         Write-Info "  2. Press Ctrl+, to open settings"
         Write-Info "  3. Search for 'terminal.integrated.fontFamily'"
         Write-Info "  4. Set to: MesloLGM Nerd Font Mono"
     }
 } catch {
-    Write-Warning "Failed to configure VS Code: $($_.Exception.Message)"
+    Write-Warning "Failed to configure editors: $($_.Exception.Message)"
     Write-Info "Manual configuration steps:"
-    Write-Info "  1. Open VS Code"
+    Write-Info "  1. Open your editor (VS Code or Cursor AI)"
     Write-Info "  2. Press Ctrl+, to open settings"
     Write-Info "  3. Search for 'terminal.integrated.fontFamily'"
     Write-Info "  4. Set to: MesloLGM Nerd Font Mono"
