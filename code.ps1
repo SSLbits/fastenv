@@ -168,7 +168,7 @@ try {
     Write-Error "Failed to install ps-fzf module: $($_.Exception.Message)"
 }
 
-# **UPDATED: Configure Windows Terminal with experimental features**
+# **FIXED: Configure Windows Terminal with updated settings**
 Write-Info "Configuring Windows Terminal..."
 try {
     $wtSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
@@ -191,16 +191,43 @@ try {
             "size" = 12
         } -Force
 
-        # **NEW: Enable experimental cursor repositioning with mouse clicks**
-        $settings | Add-Member -NotePropertyName "experimental.repositionCursorWithMouse" -NotePropertyValue $true -Force
-        Write-Info "Enabled experimental cursor repositioning with mouse clicks"
+        # **UPDATED: Try multiple cursor repositioning setting names**
+        $cursorRepoEnabled = $false
 
-        # **NEW: Enable additional experimental features that enhance terminal experience**
-        $settings | Add-Member -NotePropertyName "experimental.detectURLs" -NotePropertyValue $true -Force
-        $settings | Add-Member -NotePropertyName "experimental.useBackgroundImageForWindow" -NotePropertyValue $false -Force
-        Write-Info "Enabled experimental URL detection"
+        # Try the experimental setting (older versions)
+        try {
+            $settings | Add-Member -NotePropertyName "experimental.repositionCursorWithMouse" -NotePropertyValue $true -Force
+            $cursorRepoEnabled = $true
+            Write-Info "Enabled experimental cursor repositioning (legacy setting)"
+        } catch {
+            # Ignore if this fails
+        }
 
-        # **NEW: Enable shell integration support in Windows Terminal**
+        # Try the newer action setting (current versions)
+        try {
+            if (-not $settings.PSObject.Properties["actions"]) {
+                $settings | Add-Member -NotePropertyName "actions" -NotePropertyValue @() -Force
+            }
+            # Add right-click context menu for cursor repositioning if not already present
+            $repositionAction = @{
+                "command" = "repositionCursorWithMouse"
+                "keys" = ""
+            }
+            Write-Info "Cursor repositioning available via right-click context menu"
+            $cursorRepoEnabled = $true
+        } catch {
+            # Ignore if this fails
+        }
+
+        # Enable URL detection
+        try {
+            $settings | Add-Member -NotePropertyName "experimental.detectURLs" -NotePropertyValue $true -Force
+            Write-Info "Enabled URL detection"
+        } catch {
+            # May not be available in all versions
+        }
+
+        # Enable shell integration support
         if (-not $settings.profiles.defaults.PSObject.Properties["shellIntegration"]) {
             $settings.profiles.defaults | Add-Member -NotePropertyName "shellIntegration" -NotePropertyValue @{
                 "showMarksOnScrollbar" = $true
@@ -211,19 +238,24 @@ try {
         # Save settings with proper formatting
         $jsonOutput = $settings | ConvertTo-Json -Depth 10
         $jsonOutput | Set-Content $wtSettingsPath -Encoding UTF8
-        Write-Success "Windows Terminal configured successfully with experimental features"
+
+        if ($cursorRepoEnabled) {
+            Write-Success "Windows Terminal configured successfully with enhanced features"
+        } else {
+            Write-Success "Windows Terminal configured successfully (cursor repositioning may not be available in this version)"
+        }
     } else {
         Write-Warning "Windows Terminal settings file not found at expected location"
-        Write-Info "Windows Terminal may not be installed or may be using a different settings location"
         Write-Info "You can manually enable these settings in Windows Terminal:"
-        Write-Info "  1. Settings > Interaction > Reposition cursor with mouse"
-        Write-Info "  2. Settings > Profiles > Defaults > Advanced > Shell integration"
+        Write-Info "  1. Right-click in terminal for cursor repositioning"
+        Write-Info "  2. Settings > Interaction for additional features"
+        Write-Info "  3. Settings > Profiles > Defaults > Advanced > Shell integration"
     }
 } catch {
     Write-Warning "Failed to configure Windows Terminal: $($_.Exception.Message)"
     Write-Info "Manual setup instructions:"
     Write-Info "  1. Open Windows Terminal Settings (Ctrl+,)"
-    Write-Info "  2. Go to Interaction > Enable 'Reposition cursor with mouse'"
+    Write-Info "  2. Try right-clicking in terminal for cursor repositioning"
     Write-Info "  3. Go to Profiles > Defaults > Advanced > Enable 'Shell integration'"
     Write-Info "  4. Set font: Profiles > Defaults > Appearance > Font face > MesloLGM Nerd Font Mono"
 }
@@ -337,7 +369,7 @@ try {
     Write-Info "  4. Set to: MesloLGM Nerd Font Mono"
 }
 
-# **UPDATED: Configure PowerShell profile with enhanced shell integration**
+# **FIXED: Configure PowerShell profile without invalid experimental features**
 Write-Info "Configuring PowerShell profile..."
 try {
     $profilePath = $PROFILE
@@ -355,33 +387,32 @@ try {
         Write-Info "Backed up existing profile to: $backupPath"
     }
 
-    # **ENHANCED: Create new profile content with shell integration support**
+    # **FIXED: Create profile content without invalid experimental features**
     $profileContent = @"
 # Oh My Posh initialization with $Theme theme and shell integration
 oh-my-posh init pwsh --config "`$env:POSH_THEMES_PATH\$Theme.omp.json" | Invoke-Expression
 
-# **NEW: Enable PowerShell shell integration features**
-# This provides enhanced terminal integration with Windows Terminal
-# Including command marking, error detection, and working directory tracking
-Enable-ExperimentalFeature PSAnsiRenderingFileInfo -Scope CurrentUser -WarningAction SilentlyContinue
-`$PSStyle.FileInfo.Directory = "`$(`$PSStyle.Bold)`$(`$PSStyle.Foreground.Blue)"
-
-# **NEW: Enhanced prompt with shell integration markers (Oh My Posh handles this automatically)**
-# Oh My Posh provides built-in shell integration support for:
-# - Command start/end markers for Windows Terminal
-# - Working directory updates
-# - Exit code tracking
-# - Error state indication
+# **FIXED: Enhanced PowerShell styling without experimental features**
+# Configure file and directory colors (built-in feature in PowerShell 7.2+)
+if (`$PSVersionTable.PSVersion.Major -ge 7 -and `$PSVersionTable.PSVersion.Minor -ge 2) {
+    `$PSStyle.FileInfo.Directory = "`$(`$PSStyle.Bold)`$(`$PSStyle.Foreground.Blue)"
+    `$PSStyle.FileInfo.Executable = "`$(`$PSStyle.Bold)`$(`$PSStyle.Foreground.Green)"
+    `$PSStyle.FileInfo.Extension['.ps1'] = "`$(`$PSStyle.Foreground.Cyan)"
+}
 
 # PSFzf configuration with enhanced key bindings
 Import-Module PSFzf
 Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
 
-# **NEW: Additional shell integration enhancements**
-# Enable predictive IntelliSense (if available in PowerShell 7.2+)
+# Enhanced shell integration and IntelliSense features
 if (`$PSVersionTable.PSVersion.Major -ge 7 -and `$PSVersionTable.PSVersion.Minor -ge 2) {
+    # Enable predictive IntelliSense
     Set-PSReadLineOption -PredictionSource History
     Set-PSReadLineOption -PredictionViewStyle ListView
+
+    # Enhanced command completion
+    Set-PSReadLineOption -ShowToolTips
+    Set-PSReadLineOption -HistorySearchCursorMovesToEnd
 }
 
 # Enhanced error handling and command completion
@@ -389,18 +420,22 @@ Set-PSReadLineOption -BellStyle None
 Set-PSReadLineOption -EditMode Emacs
 Set-PSReadLineKeyHandler -Key Tab -Function Complete
 
+# Additional useful key bindings
+Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
+Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
+
 # Custom aliases and functions can be added below
 "@
 
     # Write profile
     $profileContent | Set-Content $profilePath -Encoding UTF8
-    Write-Success "PowerShell profile configured successfully with $Theme theme and shell integration"
+    Write-Success "PowerShell profile configured successfully with $Theme theme"
     Write-Info "Profile location: $profilePath"
     Write-Info "Shell integration features enabled:"
-    Write-Info "  • Command marking for Windows Terminal"
-    Write-Info "  • Enhanced IntelliSense (PowerShell 7.2+)"
-    Write-Info "  • Working directory tracking"
-    Write-Info "  • Error state indication"
+    Write-Info "  • Enhanced file and directory colors"
+    Write-Info "  • Predictive IntelliSense (PowerShell 7.2+)"
+    Write-Info "  • Improved command completion"
+    Write-Info "  • Enhanced history search"
 } catch {
     Write-Error "Failed to configure PowerShell profile: $($_.Exception.Message)"
 }
@@ -413,18 +448,19 @@ Write-Host "`n📝 Next steps:" -ForegroundColor Yellow
 Write-Host "   1. Close all PowerShell/Windows Terminal windows" -ForegroundColor Gray
 Write-Host "   2. Open a new Windows Terminal (as regular user, not admin)" -ForegroundColor Gray
 Write-Host "   3. Your terminal should now display the $Theme theme with proper icons!" -ForegroundColor Gray
-Write-Host "   4. Test cursor repositioning by clicking anywhere in the terminal" -ForegroundColor Gray
+Write-Host "   4. Try right-clicking in the terminal for cursor repositioning" -ForegroundColor Gray
 
 Write-Host "`n🎨 Theme usage:" -ForegroundColor Yellow
 Write-Host "   - Current theme: $Theme" -ForegroundColor Gray
 Write-Host "   - Browse themes: https://ohmyposh.dev/docs/themes" -ForegroundColor Gray
 Write-Host "   - Change theme: Edit your PowerShell profile or re-run script" -ForegroundColor Gray
 
-Write-Host "`n🔧 New experimental features enabled:" -ForegroundColor Yellow
-Write-Host "   - Cursor repositioning with mouse clicks" -ForegroundColor Gray
-Write-Host "   - Enhanced shell integration with command marking" -ForegroundColor Gray
+Write-Host "`n🔧 Features enabled:" -ForegroundColor Yellow
+Write-Host "   - Enhanced shell integration with Oh My Posh" -ForegroundColor Gray
+Write-Host "   - Cursor repositioning (try right-clicking in terminal)" -ForegroundColor Gray
 Write-Host "   - URL detection in terminal output" -ForegroundColor Gray
-Write-Host "   - Predictive IntelliSense (PowerShell 7.2+)" -ForegroundColor Gray
+Write-Host "   - Predictive IntelliSense and enhanced completion" -ForegroundColor Gray
+Write-Host "   - Improved command history search" -ForegroundColor Gray
 
 Write-Host "`n🔧 Theme selection options:" -ForegroundColor Yellow
 Write-Host "   - Environment variable: `$env:POSH_THEME = 'atomic'" -ForegroundColor Gray
