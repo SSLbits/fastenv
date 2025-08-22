@@ -168,81 +168,73 @@ try {
     Write-Error "Failed to install ps-fzf module: $($_.Exception.Message)"
 }
 
-# **BULLETPROOF: Windows Terminal configuration with reliable JSON handling**
+# **FINAL: Windows Terminal configuration with manual activation instructions**
 Write-Info "Configuring Windows Terminal..."
 try {
     $wtSettingsPath = "$env:LOCALAPPDATA\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json"
     if (Test-Path $wtSettingsPath) {
-        # Read and parse existing settings
+        # Backup first
+        $backupPath = "$wtSettingsPath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+        Copy-Item $wtSettingsPath $backupPath
+
+        # Read existing settings
         $settingsContent = Get-Content $wtSettingsPath -Raw
-        $existingSettings = $settingsContent | ConvertFrom-Json
+        $settings = $settingsContent | ConvertFrom-Json
 
-        # Create new settings hashtable
+        # Convert to hashtable for reliable property handling
         $newSettings = @{}
+        $settings.PSObject.Properties | ForEach-Object { $newSettings[$_.Name] = $_.Value }
 
-        # Preserve all existing settings except the ones we want to override
-        $existingSettings.PSObject.Properties | ForEach-Object {
-            $newSettings[$_.Name] = $_.Value
-        }
+        # Ensure structure exists
+        if (-not $newSettings.profiles) { $newSettings.profiles = @{} }
+        if (-not $newSettings.profiles.defaults) { $newSettings.profiles.defaults = @{} }
 
-        # **FORCE SET: Experimental features at root level**
+        # **CRITICAL: Set experimental features at ROOT LEVEL**
         $newSettings['experimental.repositionCursorWithMouse'] = $true
         $newSettings['experimental.detectURLs'] = $true
 
-        # **ENSURE: Profiles structure exists**
-        if (-not $newSettings.profiles) {
-            $newSettings.profiles = @{}
-        }
-        if (-not $newSettings.profiles.defaults) {
-            $newSettings.profiles.defaults = @{}
-        }
-
-        # **SET: Font configuration**
+        # Configure font
         $newSettings.profiles.defaults.font = @{
             "face" = "MesloLGM Nerd Font Mono"
             "size" = 12
         }
 
-        # **OPTIONAL: Shell integration (if supported)**
+        # Optional shell integration
         try {
             if (-not $newSettings.profiles.defaults.shellIntegration) {
                 $newSettings.profiles.defaults.shellIntegration = @{
                     "showMarksOnScrollbar" = $true
                 }
             }
-        } catch {
-            Write-Info "Shell integration not supported in this Windows Terminal version (skipped)"
-        }
+        } catch { }
 
-        # Write back to file with proper formatting
-        $jsonOutput = $newSettings | ConvertTo-Json -Depth 10
-        $jsonOutput | Set-Content $wtSettingsPath -Encoding UTF8
+        # Save settings
+        $newSettings | ConvertTo-Json -Depth 10 | Set-Content $wtSettingsPath -Encoding UTF8
 
-        Write-Success "Windows Terminal configured successfully"
-        Write-Info "✓ Cursor repositioning: ENABLED"
-        Write-Info "✓ URL detection: ENABLED" 
+        Write-Success "Windows Terminal JSON configured successfully"
+        Write-Info "✓ experimental.repositionCursorWithMouse = true (set in JSON)"
+        Write-Info "✓ experimental.detectURLs = true (set in JSON)"
         Write-Info "✓ Font: MesloLGM Nerd Font Mono"
 
-        # Verify the settings were written correctly
-        Write-Info "Verifying configuration..."
-        $verifyContent = Get-Content $wtSettingsPath -Raw | ConvertFrom-Json
-        if ($verifyContent.'experimental.repositionCursorWithMouse' -eq $true) {
-            Write-Success "✓ Cursor repositioning confirmed in settings file"
-        } else {
-            Write-Warning "⚠ Cursor repositioning may not have been set correctly"
-        }
+        # **IMPORTANT: Manual activation instructions**
+        Write-Host "`n⚠️ IMPORTANT: One-time manual activation required!" -ForegroundColor Yellow
+        Write-Host "Windows Terminal 1.22.12111.0 requires manual UI toggle for experimental features:" -ForegroundColor Cyan
+        Write-Host "`n📝 One-time setup steps:" -ForegroundColor Yellow
+        Write-Host "   1. Close ALL Windows Terminal windows completely" -ForegroundColor Gray
+        Write-Host "   2. Open Windows Terminal" -ForegroundColor Gray
+        Write-Host "   3. Press Ctrl+, (Settings)" -ForegroundColor Gray
+        Write-Host "   4. Click 'Interaction' in left sidebar" -ForegroundColor Gray
+        Write-Host "   5. Find 'Reposition cursor with mouse'" -ForegroundColor Gray
+        Write-Host "   6. Toggle it OFF, then toggle it ON" -ForegroundColor Gray
+        Write-Host "   7. Close settings" -ForegroundColor Gray
+        Write-Host "   8. Test cursor repositioning by clicking in terminal" -ForegroundColor Gray
+        Write-Host "`n💡 This manual toggle is only needed ONCE to activate the feature!" -ForegroundColor Green
 
     } else {
         Write-Warning "Windows Terminal settings file not found"
-        Write-Info "Manual setup required: Settings → Interaction → Reposition cursor with mouse"
     }
 } catch {
-    Write-Warning "Configuration failed: $($_.Exception.Message)"
-    Write-Info "Manual steps:"
-    Write-Info "  1. Open Windows Terminal"
-    Write-Info "  2. Press Ctrl+, (Settings)"
-    Write-Info "  3. Go to Interaction tab"
-    Write-Info "  4. Toggle ON 'Reposition cursor with mouse'"
+    Write-Error "Configuration failed: $($_.Exception.Message)"
 }
 
 # Configure VS Code and Cursor AI
