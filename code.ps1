@@ -1,5 +1,5 @@
 # PowerShell Environment Setup Script with Theme Support  
-# Author: Enhanced version with simplified profile
+# Author: Enhanced version with ultra-minimal profile
 # Date: 2025-08-22
 
 param(
@@ -242,7 +242,7 @@ try {
     Write-Warning "Failed to configure editors: $($_.Exception.Message)"
 }
 
-# **SIMPLIFIED: Configure PowerShell profile (essential only)**
+# **ULTRA-MINIMAL: Configure PowerShell profile (silent & fast)**
 Write-Info "Configuring PowerShell profile..."
 try {
     $profilePath = $PROFILE
@@ -260,34 +260,24 @@ try {
         Write-Info "Backed up existing profile to: $backupPath"
     }
 
-    # **SIMPLIFIED: Essential-only profile content**
+    # **ULTRA-MINIMAL: Silent profile content (no messages, no try-catch)**
     $profileContent = @"
-# Oh My Posh initialization with $Theme theme
+# Oh My Posh initialization
 oh-my-posh init pwsh --config "`$env:POSH_THEMES_PATH\$Theme.omp.json" | Invoke-Expression
 
-# PSFzf configuration with key binding conflict resolution
-try {
-    Import-Module PSFzf -ErrorAction Stop
-
-    # Remove conflicting default bindings
-    Remove-PSReadLineKeyHandler -Key 'Ctrl+r'
-    Remove-PSReadLineKeyHandler -Key 'Ctrl+t'
-
-    # Configure PSFzf key bindings
-    Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
-    Set-PsFzfOption -TabExpansion
-
-    Write-Host "fzf loaded successfully - Press Ctrl+T for file search, Ctrl+R for history" -ForegroundColor Green
-} catch {
-    Write-Host "PSFzf failed to load: `$(`$_.Exception.Message)" -ForegroundColor Yellow
-}
+# PSFzf configuration
+Import-Module PSFzf
+Remove-PSReadLineKeyHandler -Key 'Ctrl+r'
+Remove-PSReadLineKeyHandler -Key 'Ctrl+t'
+Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
+Set-PsFzfOption -TabExpansion
 "@
 
-    # Write simplified profile
+    # Write ultra-minimal profile
     $profileContent | Set-Content $profilePath -Encoding UTF8
     Write-Success "PowerShell profile configured successfully with $Theme theme"
     Write-Info "Profile location: $profilePath"
-    Write-Info "✨ Simplified profile contains only essential Oh My Posh and fzf configuration"
+    Write-Info "⚡ Ultra-minimal profile for fastest loading"
 } catch {
     Write-Error "Failed to configure PowerShell profile: $($_.Exception.Message)"
 }
@@ -304,10 +294,11 @@ Write-Host "   4. Test fzf functionality:" -ForegroundColor Gray
 Write-Host "      • Press Ctrl+T for fuzzy file search" -ForegroundColor Gray
 Write-Host "      • Press Ctrl+R for fuzzy history search" -ForegroundColor Gray
 
-Write-Host "`n✨ Profile simplified to essentials only:" -ForegroundColor Yellow
-Write-Host "   • Oh My Posh theming" -ForegroundColor Gray
-Write-Host "   • fzf fuzzy search functionality" -ForegroundColor Gray
-Write-Host "   • PowerShell 7.2+ uses built-in colors and features automatically" -ForegroundColor Gray
+Write-Host "`n⚡ Ultra-minimal profile optimizations:" -ForegroundColor Yellow
+Write-Host "   • No startup messages" -ForegroundColor Gray
+Write-Host "   • No try-catch error handling (faster loading)" -ForegroundColor Gray
+Write-Host "   • Essential Oh My Posh + fzf configuration only" -ForegroundColor Gray
+Write-Host "   • Should reduce profile loading time significantly" -ForegroundColor Gray
 
 Write-Host "`n🎨 Theme selection options:" -ForegroundColor Yellow
 Write-Host "   - Environment variable: `$env:POSH_THEME = 'atomic'" -ForegroundColor Gray
