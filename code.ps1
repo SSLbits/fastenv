@@ -1,6 +1,6 @@
 # PowerShell Environment Setup Script with Theme Support
-# Author: Enhanced version with theme selection and Cursor AI support
-# Date: 2025-07-17
+# Author: Enhanced version with theme selection, Cursor AI support, and improved fzf handling
+# Date: 2025-08-22
 
 param(
     [switch]$Force,
@@ -31,6 +31,55 @@ function Write-Success { param($Message) Write-Host "✅ $Message" -ForegroundCo
 function Write-Warning { param($Message) Write-Host "⚠️ $Message" -ForegroundColor Yellow }
 function Write-Info { param($Message) Write-Host "🔧 $Message" -ForegroundColor Cyan }
 function Write-Error { param($Message) Write-Host "❌ $Message" -ForegroundColor Red }
+
+# **NEW: Enhanced PATH refresh function**
+function Update-SessionPath {
+    Write-Info "Refreshing environment PATH..."
+    $machinePath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
+    $userPath = [System.Environment]::GetEnvironmentVariable("PATH", "User")
+    $env:PATH = "$machinePath;$userPath"
+    Write-Info "PATH updated for current session"
+}
+
+# **NEW: fzf verification function**
+function Test-FzfInstallation {
+    Write-Info "Verifying fzf installation..."
+
+    # Test if fzf command is available
+    $fzfCommand = Get-Command fzf -ErrorAction SilentlyContinue
+    if ($fzfCommand) {
+        Write-Success "fzf executable found at: $($fzfCommand.Source)"
+
+        # Test fzf version
+        try {
+            $fzfVersion = & fzf --version
+            Write-Info "fzf version: $fzfVersion"
+            return $true
+        } catch {
+            Write-Warning "fzf found but version check failed: $($_.Exception.Message)"
+            return $false
+        }
+    } else {
+        Write-Warning "fzf executable not found in PATH"
+
+        # Check common installation locations
+        $commonPaths = @(
+            "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\junegunn.fzf_Microsoft.Winget.Source_8wekyb3d8bbwe",
+            "$env:PROGRAMFILES\fzf",
+            "$env:USERPROFILE\.fzf\bin"
+        )
+
+        foreach ($path in $commonPaths) {
+            if (Test-Path "$path\fzf.exe") {
+                Write-Info "Found fzf at: $path\fzf.exe"
+                Write-Warning "fzf is installed but not in PATH. This will be fixed after terminal restart."
+                return $true
+            }
+        }
+
+        return $false
+    }
+}
 
 # Theme validation function
 function Test-OhMyPoshTheme {
@@ -91,11 +140,7 @@ try {
     if ($Force -or -not (Get-Command oh-my-posh -ErrorAction SilentlyContinue)) {
         winget install JanDeDobbeleer.OhMyPosh -s winget --accept-package-agreements --accept-source-agreements
         Write-Success "Oh My Posh installed successfully"
-
-        # Refresh PATH for current session
-        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH","User")
-        Write-Info "Environment PATH refreshed"
-
+        Update-SessionPath
     } else {
         Write-Warning "Oh My Posh already installed. Use -Force to reinstall."
     }
@@ -137,35 +182,62 @@ try {
     Write-Warning "Failed to enable Oh My Posh auto-upgrade: $($_.Exception.Message)"
 }
 
-# Install fzf
+# **ENHANCED: Install fzf with better verification**
 Write-Info "Installing fzf..."
 try {
-    if ($Force -or -not (Get-Command fzf -ErrorAction SilentlyContinue)) {
+    $fzfInstalled = Get-Command fzf -ErrorAction SilentlyContinue
+
+    if ($Force -or -not $fzfInstalled) {
+        Write-Info "Installing fzf via winget..."
         winget install junegunn.fzf -s winget --accept-package-agreements --accept-source-agreements
-        Write-Success "fzf installed successfully"
+        Write-Success "fzf installation completed"
 
-        # Refresh PATH again after fzf installation
-        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH","User")
-        Write-Info "Environment PATH refreshed after fzf installation"
+        # Update PATH after installation
+        Update-SessionPath
 
+        # Wait a moment for PATH to propagate
+        Start-Sleep -Seconds 2
+
+        # Verify installation
+        if (Test-FzfInstallation) {
+            Write-Success "fzf verification successful"
+        } else {
+            Write-Warning "fzf installed but not immediately accessible. This is normal - it will work after terminal restart."
+        }
     } else {
         Write-Warning "fzf already installed. Use -Force to reinstall."
+        # Still verify it's working
+        Test-FzfInstallation | Out-Null
     }
 } catch {
     Write-Error "Failed to install fzf: $($_.Exception.Message)"
+    Write-Info "Manual installation: Download from https://github.com/junegunn/fzf/releases"
 }
 
-# Install ps-fzf module
-Write-Info "Installing ps-fzf module..."
+# **ENHANCED: Install PSFzf module with better error handling**
+Write-Info "Installing PSFzf module..."
 try {
-    if ($Force -or -not (Get-Module -ListAvailable -Name PSFzf)) {
-        Install-Module -Name PSFzf -Force -Scope CurrentUser
-        Write-Success "ps-fzf module installed successfully"
+    $psfzfInstalled = Get-Module -ListAvailable -Name PSFzf
+
+    if ($Force -or -not $psfzfInstalled) {
+        Write-Info "Installing PSFzf PowerShell module..."
+        Install-Module -Name PSFzf -Force -Scope CurrentUser -AllowClobber
+        Write-Success "PSFzf module installed successfully"
     } else {
-        Write-Warning "ps-fzf already installed. Use -Force to reinstall."
+        Write-Warning "PSFzf already installed. Use -Force to reinstall."
+    }
+
+    # Test if module can be imported
+    try {
+        Import-Module PSFzf -Force -ErrorAction Stop
+        Write-Success "PSFzf module imported successfully"
+    } catch {
+        Write-Warning "PSFzf module installed but failed to import: $($_.Exception.Message)"
+        Write-Info "This may be resolved after terminal restart"
     }
 } catch {
-    Write-Error "Failed to install ps-fzf module: $($_.Exception.Message)"
+    Write-Error "Failed to install PSFzf module: $($_.Exception.Message)"
+    Write-Info "Manual installation: Install-Module -Name PSFzf -Scope CurrentUser"
 }
 
 # Configure Windows Terminal
@@ -205,10 +277,10 @@ try {
     Write-Info "Manual setup: Settings > Profiles > Defaults > Appearance > Font face > MesloLGM Nerd Font Mono"
 }
 
-# **UPDATED: Configure VS Code AND Cursor AI**
+# Configure VS Code and Cursor AI
 Write-Info "Configuring VS Code and Cursor AI..."
 try {
-    # **EXPANDED: Check multiple possible installation locations including Cursor AI**
+    # Check multiple possible installation locations including Cursor AI
     $editorPaths = @(
         @{ Path = "$env:APPDATA\Code\User\settings.json"; Name = "VS Code (User Install)" },
         @{ Path = "$env:APPDATA\Code - Insiders\User\settings.json"; Name = "VS Code Insiders (User)" },
@@ -278,7 +350,7 @@ try {
                 $editorSettings["terminal.integrated.fontFamily"] = "MesloLGM Nerd Font Mono"
                 $editorSettings["terminal.integrated.fontSize"] = 12
 
-                # **ADDED: Cursor AI specific font settings**
+                # Cursor AI specific font settings
                 if ($editorName -like "*Cursor*") {
                     # Cursor AI may use additional font settings
                     $editorSettings["editor.fontFamily"] = "MesloLGM Nerd Font Mono, 'Courier New', monospace"
@@ -314,7 +386,7 @@ try {
     Write-Info "  4. Set to: MesloLGM Nerd Font Mono"
 }
 
-# Configure PowerShell profile
+# **ENHANCED: Configure PowerShell profile with robust fzf handling**
 Write-Info "Configuring PowerShell profile..."
 try {
     $profilePath = $PROFILE
@@ -332,14 +404,52 @@ try {
         Write-Info "Backed up existing profile to: $backupPath"
     }
 
-    # Create new profile content with selected theme
+    # **ENHANCED: Create profile content with robust fzf error handling**
     $profileContent = @"
 # Oh My Posh initialization with $Theme theme
 oh-my-posh init pwsh --config "`$env:POSH_THEMES_PATH\$Theme.omp.json" | Invoke-Expression
 
-# PSFzf configuration
-Import-Module PSFzf
-Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
+# **ENHANCED: PSFzf configuration with error handling**
+try {
+    # Import PSFzf module
+    Import-Module PSFzf -ErrorAction Stop
+
+    # Configure key bindings
+    Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
+
+    # Additional fzf options for better experience
+    Set-PsFzfOption -TabExpansion
+
+    # Verify fzf is working
+    if (Get-Command fzf -ErrorAction SilentlyContinue) {
+        Write-Host "✅ fzf loaded successfully - Press Ctrl+T for file search, Ctrl+R for history" -ForegroundColor Green
+    } else {
+        Write-Host "⚠️ fzf executable not found - try restarting terminal" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "⚠️ PSFzf failed to load: `$(`$_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "💡 Try: Install-Module PSFzf -Force" -ForegroundColor Cyan
+}
+
+# **NEW: Enhanced PowerShell settings for better terminal experience**
+# Configure file and directory colors (built-in feature in PowerShell 7.2+)
+if (`$PSVersionTable.PSVersion.Major -ge 7 -and `$PSVersionTable.PSVersion.Minor -ge 2) {
+    `$PSStyle.FileInfo.Directory = "`$(`$PSStyle.Bold)`$(`$PSStyle.Foreground.Blue)"
+    `$PSStyle.FileInfo.Executable = "`$(`$PSStyle.Bold)`$(`$PSStyle.Foreground.Green)"
+    `$PSStyle.FileInfo.Extension['.ps1'] = "`$(`$PSStyle.Foreground.Cyan)"
+
+    # Enable predictive IntelliSense
+    Set-PSReadLineOption -PredictionSource History -PredictionViewStyle ListView
+}
+
+# Enhanced error handling and command completion
+Set-PSReadLineOption -BellStyle None
+Set-PSReadLineOption -EditMode Emacs
+Set-PSReadLineKeyHandler -Key Tab -Function Complete
+
+# Additional useful key bindings
+Set-PSReadLineKeyHandler -Key UpArrow -Function HistorySearchBackward
+Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
 
 # Custom aliases and functions can be added below
 "@
@@ -348,6 +458,7 @@ Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory
     $profileContent | Set-Content $profilePath -Encoding UTF8
     Write-Success "PowerShell profile configured successfully with $Theme theme"
     Write-Info "Profile location: $profilePath"
+    Write-Info "fzf error handling and verification included in profile"
 } catch {
     Write-Error "Failed to configure PowerShell profile: $($_.Exception.Message)"
 }
@@ -357,9 +468,19 @@ Write-Host "`n🎉 Setup completed successfully!" -ForegroundColor Green
 Write-Host "🎨 Theme configured: $Theme" -ForegroundColor Magenta
 
 Write-Host "`n📝 Next steps:" -ForegroundColor Yellow
-Write-Host "   1. Close all PowerShell/Windows Terminal windows" -ForegroundColor Gray
-Write-Host "   2. Open a new Windows Terminal (as regular user, not admin)" -ForegroundColor Gray
-Write-Host "   3. Your terminal should now display the $Theme theme with proper icons!" -ForegroundColor Gray
+Write-Host "   1. Close ALL PowerShell/Windows Terminal windows completely" -ForegroundColor Gray
+Write-Host "   2. Wait 5 seconds" -ForegroundColor Gray  
+Write-Host "   3. Open a NEW Windows Terminal (as regular user, not admin)" -ForegroundColor Gray
+Write-Host "   4. Your terminal should display the $Theme theme with proper icons" -ForegroundColor Gray
+Write-Host "   5. **IMPORTANT**: Test fzf functionality:" -ForegroundColor Yellow
+Write-Host "      • Press Ctrl+T for fuzzy file search" -ForegroundColor Gray
+Write-Host "      • Press Ctrl+R for fuzzy history search" -ForegroundColor Gray
+Write-Host "      • If fzf doesn't work immediately, wait 30 seconds and try again" -ForegroundColor Gray
+
+Write-Host "`n🔧 fzf verification commands:" -ForegroundColor Yellow
+Write-Host "   - Test fzf: Get-Command fzf" -ForegroundColor Gray
+Write-Host "   - Test PSFzf: Get-Module PSFzf -ListAvailable" -ForegroundColor Gray
+Write-Host "   - Manual fix: Install-Module PSFzf -Force" -ForegroundColor Gray
 
 Write-Host "`n🎨 Theme usage:" -ForegroundColor Yellow
 Write-Host "   - Current theme: $Theme" -ForegroundColor Gray
