@@ -1,5 +1,5 @@
-# PowerShell Environment Setup Script with Theme Support  
-# Author: Enhanced version with ultra-minimal profile
+# PowerShell Environment Setup Script with Manual Font Installation
+# Author: Simplified version with manual font installation
 # Date: 2025-08-22
 
 param(
@@ -38,6 +38,124 @@ function Update-SessionPath {
     Write-Info "PATH updated for current session"
 }
 
+# **MANUAL FONT INSTALLATION FUNCTION**
+function Install-MesloNerdFontManual {
+    Write-Host "📦 Starting manual font installation process..." -ForegroundColor Magenta
+
+    # Create temp directory
+    $tempDir = Join-Path $env:TEMP "MesloNerdFont_Manual"
+    if (Test-Path $tempDir) {
+        Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+
+    # Download latest Meslo.zip from GitHub
+    $downloadUrl = "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Meslo.zip"
+    $zipPath = Join-Path $tempDir "Meslo.zip"
+
+    Write-Info "Downloading latest Meslo Nerd Font from GitHub..."
+    Write-Info "URL: $downloadUrl"
+
+    try {
+        # Download with progress indication
+        $webClient = New-Object System.Net.WebClient
+        $webClient.DownloadFile($downloadUrl, $zipPath)
+        $webClient.Dispose()
+
+        $fileSizeMB = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
+        Write-Success "Downloaded: $fileSizeMB MB"
+    } catch {
+        Write-Error "Download failed: $($_.Exception.Message)"
+        return $false
+    }
+
+    # Extract the zip file
+    Write-Info "Extracting font files..."
+    try {
+        Expand-Archive -Path $zipPath -DestinationPath $tempDir -Force
+        Write-Success "Extraction completed"
+    } catch {
+        Write-Error "Extraction failed: $($_.Exception.Message)"
+        return $false
+    }
+
+    # **ENHANCED: Delete zip file immediately after extraction**
+    Write-Info "Removing zip file..."
+    try {
+        Remove-Item $zipPath -Force
+        Write-Success "Zip file removed"
+    } catch {
+        Write-Warning "Could not remove zip file: $($_.Exception.Message)"
+    }
+
+    # Clean up unwanted files (README.md, LICENSE)
+    Write-Info "Cleaning up documentation files..."
+    $unwantedFiles = Get-ChildItem -Path $tempDir -Recurse | Where-Object { 
+        $_.Name -like "*README*" -or 
+        $_.Name -like "*LICENSE*" -or 
+        $_.Name -like "*OFL*" -or
+        $_.Extension -eq ".md" -or
+        $_.Extension -eq ".txt"
+    }
+
+    $cleanedCount = 0
+    foreach ($file in $unwantedFiles) {
+        try {
+            Remove-Item $file.FullName -Force
+            Write-Info "Removed: $($file.Name)"
+            $cleanedCount++
+        } catch {
+            Write-Warning "Could not remove: $($file.Name)"
+        }
+    }
+    Write-Success "Cleaned up $cleanedCount documentation files"
+
+    # Count remaining font files
+    $fontFiles = Get-ChildItem -Path $tempDir -Recurse -Include "*.ttf", "*.otf"
+    Write-Success "Found $($fontFiles.Count) font files ready for installation"
+
+    # Open Explorer for manual installation
+    Write-Host "`n🎯 MANUAL INSTALLATION - SIMPLIFIED:" -ForegroundColor Yellow
+    Write-Host "   1. Explorer window will open with ONLY font files" -ForegroundColor Gray
+    Write-Host "   2. Press Ctrl+A to select ALL files" -ForegroundColor Gray
+    Write-Host "   3. Right-click and choose 'Install' or 'Install for all users'" -ForegroundColor Gray
+    Write-Host "   4. Wait for installation to complete" -ForegroundColor Gray
+    Write-Host "   5. Close the Explorer window" -ForegroundColor Gray
+    Write-Host "   6. Return here and press Enter to continue" -ForegroundColor Gray
+    Write-Host "   💡 No need to avoid any files - everything shown is a font!" -ForegroundColor Green
+
+    Write-Host "`n🚀 Opening Explorer window..." -ForegroundColor Green
+    try {
+        # Open the temp directory in Explorer
+        Start-Process "explorer.exe" -ArgumentList $tempDir -WindowStyle Normal
+        Write-Success "Explorer opened at: $tempDir"
+    } catch {
+        Write-Error "Failed to open Explorer: $($_.Exception.Message)"
+        Write-Info "Manual path: $tempDir"
+        return $false
+    }
+
+    # Pause script until user presses Enter
+    Write-Host "`n⏸️  PAUSED - Waiting for manual font installation..." -ForegroundColor Cyan
+    Write-Host "Press Enter when you've finished installing the fonts and closed Explorer..." -ForegroundColor Yellow
+    Read-Host
+
+    Write-Success "Resuming script execution..."
+
+    # Clean up temp directory
+    Write-Info "Cleaning up temporary files..."
+    try {
+        Remove-Item -Path $tempDir -Recurse -Force
+        Write-Success "Temporary files cleaned up"
+    } catch {
+        Write-Warning "Could not clean up temp directory: $($_.Exception.Message)"
+        Write-Info "Manual cleanup may be needed: $tempDir"
+    }
+
+    Write-Success "Manual font installation process completed!"
+    return $true
+}
+
 # Theme validation function  
 function Test-OhMyPoshTheme {
     param([string]$ThemeName)
@@ -61,6 +179,8 @@ function Test-OhMyPoshTheme {
     return $validThemes -contains $ThemeName
 }
 
+# **MAIN SCRIPT EXECUTION**
+
 # Validate theme
 if (-not (Test-OhMyPoshTheme -ThemeName $Theme)) {
     Write-Warning "Invalid theme: $Theme"
@@ -70,25 +190,6 @@ if (-not (Test-OhMyPoshTheme -ThemeName $Theme)) {
 }
 
 Write-Host "🚀 Setting up PowerShell environment with theme: $Theme" -ForegroundColor Magenta
-
-# Check if running as Administrator
-function Test-Administrator {
-    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
-    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-}
-
-# Admin check with warning
-if (Test-Administrator) {
-    Write-Warning "Note: This script should NOT be run as Administrator"
-    Write-Warning "WARNING: Running as Administrator may cause Windows Terminal to always run as admin!"
-    Write-Warning "Consider running this script as a regular user instead."
-    $continue = Read-Host "Do you want to continue anyway? (y/N)"
-    if ($continue -ne 'y' -and $continue -ne 'Y') {
-        Write-Host "Script cancelled. Please run as regular user." -ForegroundColor Yellow
-        exit 1
-    }
-}
 
 # Install Oh My Posh
 Write-Info "Installing Oh My Posh..."
@@ -104,29 +205,8 @@ try {
     Write-Error "Failed to install Oh My Posh: $($_.Exception.Message)"
 }
 
-# Install MesloLGM Nerd Font
-Write-Info "Installing MesloLGM Nerd Font..."
-try {
-    Write-Info "Installing font via Oh My Posh..."
-    $fontProcess = Start-Process -FilePath "oh-my-posh" -ArgumentList @("font", "install", "meslo") -Wait -PassThru -NoNewWindow
-
-    if ($fontProcess.ExitCode -eq 0) {
-        Write-Success "MesloLGM Nerd Font installation completed"
-    } else {
-        Write-Warning "Font installation failed with exit code: $($fontProcess.ExitCode)"
-        Write-Info "Trying alternative font installation method..."
-        try {
-            winget install --id=DEVCOM.MesloLGSNerdFont --accept-package-agreements --accept-source-agreements
-            Write-Success "Font installed via winget as alternative method"
-        } catch {
-            Write-Warning "Alternative font installation also failed. You may need to install manually."
-            Write-Info "Download from: https://github.com/ryanoasis/nerd-fonts/releases/download/v3.0.2/Meslo.zip"
-        }
-    }
-} catch {
-    Write-Error "Failed to install MesloLGM Nerd Font: $($_.Exception.Message)"
-    Write-Info "Manual installation: Download from https://github.com/ryanoasis/nerd-fonts/releases/download/v3.0.2/Meslo.zip"
-}
+# **MANUAL FONT INSTALLATION**
+Install-MesloNerdFontManual
 
 # Enable Oh My Posh auto-upgrade
 Write-Info "Enabling Oh My Posh auto-upgrade..."
@@ -180,7 +260,7 @@ try {
             $settings.profiles | Add-Member -NotePropertyName "defaults" -NotePropertyValue @{} -Force
         }
 
-        # Configure font
+        # Configure font with multiple fallback options
         $settings.profiles.defaults | Add-Member -NotePropertyName "font" -NotePropertyValue @{
             "face" = "MesloLGM Nerd Font Mono"
             "size" = 12
@@ -242,7 +322,7 @@ try {
     Write-Warning "Failed to configure editors: $($_.Exception.Message)"
 }
 
-# **ULTRA-MINIMAL: Configure PowerShell profile (silent & fast)**
+# **ULTRA-CLEAN: Configure PowerShell profile with essential elements only**
 Write-Info "Configuring PowerShell profile..."
 try {
     $profilePath = $PROFILE
@@ -260,24 +340,23 @@ try {
         Write-Info "Backed up existing profile to: $backupPath"
     }
 
-    # **ULTRA-MINIMAL: Silent profile content (no messages, no try-catch)**
+    # **MINIMAL: Essential profile content only**
     $profileContent = @"
 # Oh My Posh initialization
 oh-my-posh init pwsh --config "`$env:POSH_THEMES_PATH\$Theme.omp.json" | Invoke-Expression
 
 # PSFzf configuration
-Import-Module PSFzf
-Remove-PSReadLineKeyHandler -Key 'Ctrl+r'
-Remove-PSReadLineKeyHandler -Key 'Ctrl+t'
+Import-Module PSFzf -ErrorAction SilentlyContinue
+Remove-PSReadLineKeyHandler -Key 'Ctrl+r' -ErrorAction SilentlyContinue
+Remove-PSReadLineKeyHandler -Key 'Ctrl+t' -ErrorAction SilentlyContinue
 Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
 Set-PsFzfOption -TabExpansion
 "@
 
-    # Write ultra-minimal profile
+    # Write profile
     $profileContent | Set-Content $profilePath -Encoding UTF8
     Write-Success "PowerShell profile configured successfully with $Theme theme"
     Write-Info "Profile location: $profilePath"
-    Write-Info "⚡ Ultra-minimal profile for fastest loading"
 } catch {
     Write-Error "Failed to configure PowerShell profile: $($_.Exception.Message)"
 }
@@ -286,21 +365,24 @@ Set-PsFzfOption -TabExpansion
 Write-Host "`n🎉 Setup completed successfully!" -ForegroundColor Green
 Write-Host "🎨 Theme configured: $Theme" -ForegroundColor Magenta
 
-Write-Host "`n📝 Next steps:" -ForegroundColor Yellow
-Write-Host "   1. Close ALL PowerShell/Windows Terminal windows completely" -ForegroundColor Gray
+Write-Host "`n📝 Next Steps:" -ForegroundColor Yellow
+Write-Host "   1. **CLOSE THIS TERMINAL COMPLETELY**" -ForegroundColor Red
 Write-Host "   2. Wait 5 seconds" -ForegroundColor Gray  
-Write-Host "   3. Open a NEW Windows Terminal" -ForegroundColor Gray
-Write-Host "   4. Test fzf functionality:" -ForegroundColor Gray
-Write-Host "      • Press Ctrl+T for fuzzy file search" -ForegroundColor Gray
-Write-Host "      • Press Ctrl+R for fuzzy history search" -ForegroundColor Gray
+Write-Host "   3. **OPEN A NEW Windows Terminal**" -ForegroundColor Red
+Write-Host "   4. Oh My Posh prompt should appear immediately!" -ForegroundColor Green
+Write-Host "   5. Test fzf: Ctrl+T (files) and Ctrl+R (history)" -ForegroundColor Gray
 
-Write-Host "`n⚡ Ultra-minimal profile optimizations:" -ForegroundColor Yellow
-Write-Host "   • No startup messages" -ForegroundColor Gray
-Write-Host "   • No try-catch error handling (faster loading)" -ForegroundColor Gray
-Write-Host "   • Essential Oh My Posh + fzf configuration only" -ForegroundColor Gray
-Write-Host "   • Should reduce profile loading time significantly" -ForegroundColor Gray
+Write-Host "`n🚀 Profile Features:" -ForegroundColor Yellow
+Write-Host "   • Ultra-clean profile with just the essentials" -ForegroundColor Green
+Write-Host "   • Lightning-fast loading" -ForegroundColor Green
+Write-Host "   • Oh My Posh + fzf ready to go" -ForegroundColor Green
 
-Write-Host "`n🎨 Theme selection options:" -ForegroundColor Yellow
-Write-Host "   - Environment variable: `$env:POSH_THEME = 'atomic'" -ForegroundColor Gray
-Write-Host "   - Download script: .\setup.ps1 -Theme 'atomic'" -ForegroundColor Gray
-Write-Host "   - Default theme: quick-term" -ForegroundColor Gray
+Write-Host "`n🎯 Font Installation:" -ForegroundColor Yellow
+Write-Host "   • Zip automatically deleted after extraction" -ForegroundColor Green
+Write-Host "   • Just Ctrl+A and right-click install!" -ForegroundColor Green
+Write-Host "   • No files to avoid - everything shown is a font" -ForegroundColor Green
+
+Write-Host "`n🎨 Theme options:" -ForegroundColor Yellow
+Write-Host "   - Environment: `$env:POSH_THEME = 'atomic'" -ForegroundColor Gray
+Write-Host "   - Script parameter: .\setup.ps1 -Theme 'atomic'" -ForegroundColor Gray
+Write-Host "   - Current: $Theme" -ForegroundColor Gray
